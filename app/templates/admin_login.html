@@ -14,6 +14,7 @@
     {% endif %}
 
     <form action="{{ prefix }}/admin/login" method="post" class="mt-5 space-y-4">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
       <div>
         <label for="password" class="block text-sm font-medium text-slate-700">Password</label>
         <input id="password" name="password" type="password" required autofocus
