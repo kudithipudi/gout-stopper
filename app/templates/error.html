@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Something went wrong — GoutStopper{% endblock %}
+{% block body %}
+
+<div class="max-w-md mx-auto text-center py-12">
+  <div class="text-5xl mb-4">{{ status_code }}</div>
+  <h1 class="text-xl font-bold tracking-tight">Something went wrong</h1>
+  <p class="text-slate-500 mt-2">{{ detail }}</p>
+  <a href="{{ prefix }}/" class="inline-block mt-6 rounded-lg bg-indigo-600 px-5 py-2.5 text-white font-semibold text-sm transition hover:bg-indigo-500">
+    Back to GoutStopper
+  </a>
+</div>
+
+{% endblock %}
