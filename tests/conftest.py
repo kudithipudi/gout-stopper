@@ -1,4 +1,5 @@
 import inspect
+import re
 
 import pytest
 import pytest_asyncio
@@ -54,6 +55,16 @@ async def anon_client(tmp_path, monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     monkeypatch.setenv("ADMIN_PASSWORD", TEST_ADMIN_PASSWORD)
     monkeypatch.setenv("SESSION_SECRET", "test-session-secret")
+    # High enough that the existing functional tests (which each make a
+    # handful of /scan calls, all reported from the same TestClient "IP")
+    # never trip the limiter. The limiter itself gets its own dedicated
+    # tests in tests/test_ratelimit.py with a small override.
+    monkeypatch.setenv("SCAN_RATE_LIMIT_PER_MINUTE", "1000")
+    # Likewise for the admin login throttle: every test logs in through the
+    # same TestClient "IP", so the production default of 5/min would start
+    # returning 429s partway through the suite. The throttle gets its own
+    # dedicated test in tests/test_ratelimit.py with a small override.
+    monkeypatch.setenv("ADMIN_LOGIN_RATE_LIMIT_PER_MINUTE", "1000")
     await init_db(str(db_path))
 
     from app.main import app
@@ -63,14 +74,36 @@ async def anon_client(tmp_path, monkeypatch):
         yield tc
 
 
+def csrf_token_from(html: str) -> str:
+    """Pull the hidden csrf_token value out of a rendered admin page, the same
+    way a browser submitting the form would."""
+    match = re.search(r'name="csrf_token" value="([^"]+)"', html)
+    assert match, "expected a csrf_token hidden input in the rendered page"
+    return match.group(1)
+
+
+def login(tc) -> None:
+    """Do the full browser-shaped login: fetch the form to pick up a CSRF
+    token (and the session cookie carrying it), then post it back."""
+    token = csrf_token_from(tc.get("/admin/login").text)
+    resp = tc.post(
+        "/admin/login",
+        data={"password": TEST_ADMIN_PASSWORD, "csrf_token": token},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+
+
+def admin_csrf(tc) -> str:
+    """The current CSRF token as rendered on the admin dashboard."""
+    return csrf_token_from(tc.get("/admin").text)
+
+
 @pytest_asyncio.fixture
 async def client(anon_client):
     """A TestClient already logged in to /admin (session cookie carries over
     to every subsequent request, same as a real browser)."""
-    resp = anon_client.post(
-        "/admin/login", data={"password": TEST_ADMIN_PASSWORD}, follow_redirects=False
-    )
-    assert resp.status_code == 303
+    login(anon_client)
     return anon_client
 
 

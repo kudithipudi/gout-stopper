@@ -49,9 +49,15 @@ app.mount("/uploads", StaticFiles(directory=str(_uploads_abs)), name="uploads")
 # talk to it directly) only ever sees bare paths like "/admin" — a cookie
 # scoped to "/gout-stopper" would never match those and the session would
 # silently never be sent back.
+_session_secret = settings.session_secret or settings.admin_password
+if not _session_secret:
+    raise RuntimeError(
+        "SESSION_SECRET or ADMIN_PASSWORD must be set — refusing to start with an "
+        "insecure default session secret"
+    )
 app.add_middleware(
     SessionMiddleware,
-    secret_key=settings.session_secret or settings.admin_password or "dev-only-insecure-secret",
+    secret_key=_session_secret,
     session_cookie="gout_stopper_session",
     max_age=12 * 60 * 60,
 )

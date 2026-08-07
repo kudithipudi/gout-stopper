@@ -10,6 +10,7 @@
       <p class="text-sm text-slate-500">Add or remove foods from the gout list, and review scan feedback.</p>
     </div>
     <form action="{{ prefix }}/admin/logout" method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
       <button type="submit" class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50">
         Log out
       </button>
@@ -35,6 +36,7 @@
   <div class="rounded-xl border border-slate-200 bg-white p-5">
     <h2 class="font-semibold text-slate-800">Add a food</h2>
     <form action="{{ prefix }}/admin/foods/add" method="post" class="mt-4 grid gap-4 sm:grid-cols-2">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
       <div>
         <label for="name" class="block text-sm font-medium text-slate-700">Food name *</label>
         <input id="name" name="name" required
@@ -102,6 +104,7 @@
             <td class="px-5 py-2.5 text-right">
               <form action="{{ prefix }}/admin/foods/{{ food.id }}/delete" method="post"
                     onsubmit="return confirm('Delete {{ food.name|e }} from the list?')">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
                 <button type="submit" class="text-xs font-medium text-rose-600 hover:text-rose-800 transition">Delete</button>
               </form>
             </td>

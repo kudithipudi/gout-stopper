@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     llm_temperature: float = 0.0
     llm_timeout: int = 120
     max_upload_bytes: int = 20 * 1024 * 1024
+    scan_rate_limit_per_minute: int = 6
+    # Per-IP cap on POST /admin/login. Low enough to make online brute force
+    # of the single shared admin password pointless, high enough that a human
+    # mistyping their password a few times isn't locked out.
+    admin_login_rate_limit_per_minute: int = 5
 
 
 def get_settings() -> Settings:

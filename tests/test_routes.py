@@ -1,6 +1,24 @@
-from tests.conftest import scan_id_from
+import io
 
-FAKE_JPEG = b"\xff\xd8\xff\xe0" + b"0" * 256
+from PIL import Image
+
+from tests.conftest import (
+    TEST_ADMIN_PASSWORD,
+    admin_csrf,
+    csrf_token_from,
+    scan_id_from,
+)
+
+
+def _make_fake_jpeg() -> bytes:
+    """A genuinely decodable tiny JPEG, so Pillow's validation in
+    create_scan() accepts it — a fake/minimal header isn't enough."""
+    buf = io.BytesIO()
+    Image.new("RGB", (8, 8), color=(200, 30, 30)).save(buf, format="JPEG")
+    return buf.getvalue()
+
+
+FAKE_JPEG = _make_fake_jpeg()
 
 
 def _upload(client):
@@ -38,6 +56,16 @@ def test_unknown_scan_404(anon_client):
 def test_scan_requires_image(anon_client):
     resp = anon_client.post("/scan", follow_redirects=False)
     assert resp.status_code == 400
+
+
+def test_scan_rejects_non_image_bytes(anon_client):
+    resp = anon_client.post(
+        "/scan",
+        files={"image": ("plate.jpg", b"not actually an image, just text bytes", "image/jpeg")},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 400
+    assert "look like a valid image" in resp.text
 
 
 def test_scan_no_food(anon_client, fake_llm):
@@ -122,10 +150,14 @@ def test_admin_requires_login(anon_client):
 
 
 def test_admin_login_wrong_password(anon_client):
+    token = csrf_token_from(anon_client.get("/admin/login").text)
     resp = anon_client.post(
-        "/admin/login", data={"password": "nope"}, follow_redirects=False
+        "/admin/login",
+        data={"password": "nope", "csrf_token": token},
+        follow_redirects=False,
     )
     assert resp.status_code == 401
+    assert anon_client.get("/admin", follow_redirects=False).status_code == 303
 
 
 def test_admin_page_ok(client):
@@ -136,9 +168,16 @@ def test_admin_page_ok(client):
 
 
 def test_admin_add_and_delete_food(client):
+    token = admin_csrf(client)
     add = client.post(
         "/admin/foods/add",
-        data={"name": "caviar", "category": "avoid", "aliases": "caviar roe", "notes": ""},
+        data={
+            "name": "caviar",
+            "category": "avoid",
+            "aliases": "caviar roe",
+            "notes": "",
+            "csrf_token": token,
+        },
         follow_redirects=False,
     )
     assert add.status_code == 303
@@ -146,12 +185,25 @@ def test_admin_add_and_delete_food(client):
 
     dup = client.post(
         "/admin/foods/add",
-        data={"name": "caviar", "category": "avoid", "aliases": "", "notes": ""},
+        data={
+            "name": "caviar",
+            "category": "avoid",
+            "aliases": "",
+            "notes": "",
+            "csrf_token": token,
+        },
     )
     assert dup.status_code == 409
 
     bad_cat = client.post(
-        "/admin/foods/add", data={"name": "x", "category": "bogus", "aliases": "", "notes": ""}
+        "/admin/foods/add",
+        data={
+            "name": "x",
+            "category": "bogus",
+            "aliases": "",
+            "notes": "",
+            "csrf_token": token,
+        },
     )
     assert bad_cat.status_code == 400
 
@@ -163,16 +215,116 @@ def test_admin_add_and_delete_food(client):
     assert match, "expected a delete action for caviar"
     food_id = int(match.group(1))
 
-    dele = client.post(f"/admin/foods/{food_id}/delete", follow_redirects=False)
+    dele = client.post(
+        f"/admin/foods/{food_id}/delete",
+        data={"csrf_token": token},
+        follow_redirects=False,
+    )
     assert dele.status_code == 303
     assert "caviar" not in client.get("/admin").text
 
 
 def test_admin_delete_missing(client):
-    assert client.post("/admin/foods/99999/delete").status_code == 404
+    resp = client.post("/admin/foods/99999/delete", data={"csrf_token": admin_csrf(client)})
+    assert resp.status_code == 404
 
 
 def test_admin_logout(client):
-    resp = client.post("/admin/logout", follow_redirects=False)
+    resp = client.post(
+        "/admin/logout",
+        data={"csrf_token": admin_csrf(client)},
+        follow_redirects=False,
+    )
     assert resp.status_code == 303
     assert "/admin/login" in resp.headers["location"]
+
+
+# --- admin CSRF -----------------------------------------------------------
+
+
+def test_admin_csrf_token_is_rendered_in_forms(client):
+    html = client.get("/admin").text
+    # logout + add-food + one per food row.
+    assert html.count('name="csrf_token"') >= 3
+
+
+def test_login_page_renders_csrf_token_for_anonymous_visitor(anon_client):
+    resp = anon_client.get("/admin/login")
+    assert resp.status_code == 200
+    token = csrf_token_from(resp.text)
+    assert token
+    # And that token survives the cookie round-trip into the POST.
+    assert (
+        anon_client.post(
+            "/admin/login",
+            data={"password": TEST_ADMIN_PASSWORD, "csrf_token": token},
+            follow_redirects=False,
+        ).status_code
+        == 303
+    )
+
+
+def test_admin_add_food_rejects_missing_csrf(client):
+    resp = client.post(
+        "/admin/foods/add",
+        data={"name": "sardines-x", "category": "avoid", "aliases": "", "notes": ""},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 403
+    assert "refresh" in resp.text.lower()
+    # ...and the mutation did not happen.
+    assert "sardines-x" not in client.get("/admin").text
+
+
+def test_admin_add_food_rejects_wrong_csrf(client):
+    resp = client.post(
+        "/admin/foods/add",
+        data={
+            "name": "sardines-y",
+            "category": "avoid",
+            "aliases": "",
+            "notes": "",
+            "csrf_token": "not-the-real-token",
+        },
+        follow_redirects=False,
+    )
+    assert resp.status_code == 403
+    assert "sardines-y" not in client.get("/admin").text
+
+
+def test_admin_delete_food_rejects_missing_csrf(client):
+    import re
+
+    html = client.get("/admin").text
+    match = re.search(r"beer</td>.*?foods/(\d+)/delete", html, re.DOTALL)
+    assert match, "expected a delete action for the seeded 'beer' row"
+    food_id = int(match.group(1))
+
+    resp = client.post(f"/admin/foods/{food_id}/delete", follow_redirects=False)
+    assert resp.status_code == 403
+    assert "beer" in client.get("/admin").text  # still there
+
+
+def test_admin_logout_rejects_missing_csrf(client):
+    resp = client.post("/admin/logout", follow_redirects=False)
+    assert resp.status_code == 403
+    # Session was not cleared: still an admin.
+    assert client.get("/admin", follow_redirects=False).status_code == 200
+
+
+def test_admin_login_rejects_missing_csrf(anon_client):
+    resp = anon_client.post(
+        "/admin/login", data={"password": TEST_ADMIN_PASSWORD}, follow_redirects=False
+    )
+    assert resp.status_code == 403
+    assert anon_client.get("/admin", follow_redirects=False).status_code == 303
+
+
+def test_admin_csrf_checked_after_auth(anon_client):
+    """An anonymous POST to a protected mutation still reads as 401, not 403 —
+    require_admin runs before the CSRF check."""
+    resp = anon_client.post(
+        "/admin/foods/add",
+        data={"name": "nope", "category": "avoid", "aliases": "", "notes": ""},
+    )
+    assert resp.status_code == 401

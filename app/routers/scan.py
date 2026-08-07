@@ -1,3 +1,4 @@
+import io
 import logging
 import uuid
 from pathlib import Path
@@ -5,10 +6,12 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
+from PIL import Image, UnidentifiedImageError
 
 from app.config import get_settings
 from app.db import get_db, get_scan
 from app.services import llm, matcher
+from app.services import ratelimit
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -20,7 +23,20 @@ def _redirect(path: str) -> RedirectResponse:
     return RedirectResponse(f"{get_settings().root_path}{path}", status_code=303)
 
 
-@router.post("/scan")
+def rate_limit_scan(request: Request) -> None:
+    """FastAPI dependency: caps /scan requests per client IP. Reads the limit
+    from get_settings() on every call (settings are deliberately not cached),
+    so tests that monkeypatch SCAN_RATE_LIMIT_PER_MINUTE take effect
+    immediately."""
+    key = request.client.host if request.client else "unknown"
+    limit = get_settings().scan_rate_limit_per_minute
+    if not ratelimit.check(key, limit):
+        raise HTTPException(
+            status_code=429, detail="Too many scans — please wait a bit and try again."
+        )
+
+
+@router.post("/scan", dependencies=[Depends(rate_limit_scan)])
 async def create_scan(request: Request, db=Depends(get_db)):
     form = await request.form()
     upload = form.get("image")
@@ -31,6 +47,13 @@ async def create_scan(request: Request, db=Depends(get_db)):
         raise HTTPException(status_code=400, detail="Empty image")
     if len(raw) > get_settings().max_upload_bytes:
         raise HTTPException(status_code=400, detail="Image is too large (max 20 MB)")
+
+    try:
+        Image.open(io.BytesIO(raw)).verify()
+    except (UnidentifiedImageError, OSError, ValueError):
+        raise HTTPException(
+            status_code=400, detail="That doesn't look like a valid image — try a different photo."
+        )
 
     mime = (upload.content_type or "image/jpeg").lower().split(";")[0].strip()
     ext = ".jpg"
