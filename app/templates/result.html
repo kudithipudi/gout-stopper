@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Scan result — GoutStopper{% endblock %}
+{% block body %}
+
+<div class="max-w-xl mx-auto space-y-6">
+
+  <a href="{{ prefix }}/" class="inline-flex items-center text-sm text-indigo-600 hover:text-indigo-800 transition">
+    <span aria-hidden="true" class="mr-1">&larr;</span> Scan another photo
+  </a>
+
+  <div class="rounded-2xl overflow-hidden border border-slate-200 bg-white">
+    <img src="{{ prefix }}/{{ scan.image_path }}" alt="Your photo" class="w-full max-h-80 object-cover" />
+  </div>
+
+  {% if scan.verdict == 'error' %}
+  <div class="rounded-xl border border-rose-200 bg-rose-50 p-5">
+    <h2 class="font-semibold text-rose-800 text-lg">We couldn't analyze that photo</h2>
+    <p class="text-rose-700 mt-1 text-sm">{{ scan.error }}</p>
+    <p class="text-rose-600/80 mt-2 text-xs">Try again in a moment, or check that the photo clearly shows the food.</p>
+  </div>
+
+  {% elif scan.verdict == 'no_food' %}
+  <div class="rounded-xl border border-slate-200 bg-white p-5">
+    <div class="flex items-start gap-3">
+      <span class="inline-flex items-center justify-center h-10 w-10 rounded-full bg-slate-100 text-slate-600 text-xl">🍽️</span>
+      <div>
+        <h2 class="font-semibold text-slate-900 text-lg">No food detected</h2>
+        <p class="text-slate-600 mt-1 text-sm">We don't see any food in this photo — so there's nothing to check. Try a closer shot of your plate.</p>
+      </div>
+    </div>
+  </div>
+
+  {% else %}
+
+  {% if scan.verdict == 'avoid' %}
+  <div class="rounded-xl border border-rose-200 bg-rose-50 p-5">
+    <h2 class="font-semibold text-rose-800 text-lg">⚠️ Some of this is on the "avoid" list</h2>
+    <p class="text-rose-700 mt-1 text-sm">These are high-purine foods that commonly trigger gout. If you're prone to attacks, consider swapping them out.</p>
+  </div>
+  {% elif scan.verdict == 'caution' %}
+  <div class="rounded-xl border border-amber-200 bg-amber-50 p-5">
+    <h2 class="font-semibold text-amber-800 text-lg">⚖️ Enjoy in moderation</h2>
+    <p class="text-amber-700 mt-1 text-sm">Nothing on the "avoid" list, but a few items are moderate-purine. Portions matter for gout.</p>
+  </div>
+  {% else %}
+  <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-5">
+    <h2 class="font-semibold text-emerald-800 text-lg">✅ Looks gout-friendly</h2>
+    <p class="text-emerald-700 mt-1 text-sm">We didn't flag anything on the gout-trigger list. Keep up good hydration and portion control.</p>
+  </div>
+  {% endif %}
+
+  <div class="space-y-2">
+    <h3 class="font-semibold text-slate-700 text-sm uppercase tracking-wide">What we found</h3>
+    <div class="flex flex-wrap gap-2">
+      {% for item in scan.detected_items %}
+        {% set cat = scan.matched_foods[loop.index0].category if scan.matched_foods and scan.matched_foods[loop.index0] else 'unknown' %}
+        <span class="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium
+          {% if cat == 'avoid' %}bg-rose-100 text-rose-800
+          {% elif cat == 'limit' %}bg-amber-100 text-amber-800
+          {% elif cat == 'ok' %}bg-emerald-100 text-emerald-800
+          {% else %}bg-slate-100 text-slate-700{% endif %}">
+          {{ item.name }}
+          {% if cat == 'avoid' %}<span class="text-[10px] font-bold uppercase">avoid</span>
+          {% elif cat == 'limit' %}<span class="text-[10px] font-bold uppercase">limit</span>
+          {% elif cat == 'ok' %}<span class="text-[10px] font-bold uppercase">ok</span>{% endif %}
+        </span>
+      {% endfor %}
+    </div>
+  </div>
+
+  {% if scan.advice %}
+  <div class="rounded-xl border border-indigo-200 bg-indigo-50 p-5">
+    <h3 class="font-semibold text-indigo-800 text-sm uppercase tracking-wide">Our take</h3>
+    <p class="text-slate-800 mt-2">{{ scan.advice }}</p>
+  </div>
+  {% endif %}
+
+  {% endif %}
+
+  {% if scan.verdict != 'error' and scan.verdict != 'no_food' %}
+  <div class="rounded-xl border border-slate-200 bg-white p-5">
+    <p class="text-sm font-semibold text-slate-700">Was this helpful?</p>
+    <p class="text-xs text-slate-400 mt-0.5">Your feedback helps us measure accuracy.</p>
+    <div class="flex gap-3 mt-3">
+      <form action="{{ prefix }}/scan/{{ scan.id }}/rate" method="post" class="inline">
+        <input type="hidden" name="rating" value="good" />
+        <button type="submit" class="inline-flex items-center gap-1.5 rounded-lg border px-4 py-2 text-sm font-medium transition
+          {% if scan.rating == 'good' %}border-emerald-300 bg-emerald-50 text-emerald-700{% else %}border-slate-300 bg-white text-slate-600 hover:bg-slate-50{% endif %}">
+          <span aria-hidden="true">👍</span> Good
+        </button>
+      </form>
+      <form action="{{ prefix }}/scan/{{ scan.id }}/rate" method="post" class="inline">
+        <input type="hidden" name="rating" value="bad" />
+        <button type="submit" class="inline-flex items-center gap-1.5 rounded-lg border px-4 py-2 text-sm font-medium transition
+          {% if scan.rating == 'bad' %}border-rose-300 bg-rose-50 text-rose-700{% else %}border-slate-300 bg-white text-slate-600 hover:bg-slate-50{% endif %}">
+          <span aria-hidden="true">👎</span> Not helpful
+        </button>
+      </form>
+    </div>
+    {% if scan.rating %}
+    <p class="text-xs text-emerald-600 mt-3 font-medium">Thanks — your feedback is saved.</p>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <div class="text-xs text-slate-400">
+    This result was generated by an AI model and matched against a list we maintain. It's educational guidance, not medical advice — talk to your doctor about your gout plan.
+  </div>
+</div>
+
+{% endblock %}
