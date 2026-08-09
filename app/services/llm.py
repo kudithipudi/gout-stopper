@@ -125,6 +125,32 @@ async def identify_foods(raw: bytes, mime: str) -> list[dict]:
         {"type": "text", "text": "List every distinct food or drink item clearly visible in this photo."},
         {"type": "image_url", "image_url": {"url": _image_b64(raw, mime)}},
     ]
+    return await _identify(parts)
+
+
+async def identify_foods_from_text(text: str) -> list[dict] | None:
+    """Parse a user-typed food description into distinct food items, the same
+    shape as identify_foods(). Returns None when the LLM call itself failed
+    (so callers can tell "LLM down" apart from "nothing identifiable")."""
+    parts = [
+        {
+            "type": "text",
+            "text": (
+                'A user typed what they plan to eat: "%s". '
+                "List every distinct food or drink item they mentioned, using plain everyday names."
+                % text
+            ),
+        }
+    ]
+    result = await _chat_json(_IDENTIFY_SYSTEM, parts, get_settings().food_identify_model)
+    if result is None:
+        return None
+    if isinstance(result, dict) and isinstance(result.get("foods"), list):
+        return [f for f in result["foods"] if isinstance(f, dict) and f.get("name")]
+    return []
+
+
+async def _identify(parts: list[dict]) -> list[dict]:
     result = await _chat_json(_IDENTIFY_SYSTEM, parts, get_settings().food_identify_model)
     if isinstance(result, dict) and isinstance(result.get("foods"), list):
         return [f for f in result["foods"] if isinstance(f, dict) and f.get("name")]

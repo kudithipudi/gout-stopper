@@ -1,20 +1,23 @@
 # GoutStopper
 
-Snap a photo of food; the app identifies what's on the plate and flags anything
-that tends to trigger gout attacks. Educational tool — not medical advice.
+Check food for gout triggers — either snap a photo of it or just type in what
+you plan to eat. The app identifies the food and flags anything that tends to
+trigger gout attacks. Educational tool — not medical advice.
 
 ## What it is
 
-- Upload or capture a photo (mobile camera via `capture="environment"`).
+- Two ways to check food:
+  - **Photo**: upload or capture a photo (mobile camera via `capture="environment"`).
+  - **Text**: type what you plan to eat, e.g. "a cheeseburger with fries and a beer".
 - Three separate LLM purposes, each with its own configurable model:
   1. **detect** — is there any food in the photo at all? If not, say so.
-  2. **identify** — list the distinct foods/drinks visible.
+  2. **identify** — list the distinct foods/drinks visible (or named in the text).
   3. **advice** — a short, friendly takeaway written for someone prone to gout.
 - Detected items are matched **deterministically** (no LLM) against an
   admin-managed list of gout-relevant foods in three categories:
   **Avoid / Limit / OK**.
-- Every scan is stored (image + results) and visitors can rate it 👍/👎 so the
-  admin can measure accuracy over time.
+- Every scan is stored (image or typed text + results) and visitors can rate it
+  👍/👎 so the admin can measure accuracy over time.
 - Admin area (password login) to add/delete foods and review recent scans +
   ratings.
 - Basic gout information page with a clear "not medical advice" disclaimer.
@@ -54,8 +57,8 @@ venv/bin/python -m pytest
 ```
 
 The suite mocks the LLM (no network); it covers the public pages, the scan
-lifecycle (no-food, avoid verdict, LLM-down, rating), and the admin login +
-food CRUD.
+lifecycle (photo and text: no-food, avoid verdict, LLM-down, rating), and the
+admin login + food CRUD.
 
 ## Deploy
 

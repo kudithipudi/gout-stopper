@@ -20,6 +20,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_foods_name ON foods (name COLLATE NOCASE);
 CREATE TABLE IF NOT EXISTS scans (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     image_path TEXT,
+    -- User-typed food description (text scans). NULL for photo scans.
+    query_text TEXT,
     has_food INTEGER,
     -- JSON list: [{"name": "...", "confidence": 0.95}]
     detected_items TEXT NOT NULL DEFAULT '[]',

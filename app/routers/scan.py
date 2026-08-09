@@ -112,7 +112,8 @@ async def create_scan(request: Request, db=Depends(get_db)):
 async def _store_scan(
     db,
     *,
-    image_path: str,
+    image_path: str | None,
+    query_text: str = "",
     has_food: bool | None,
     detected: list[dict],
     matched: list[dict],
@@ -125,11 +126,12 @@ async def _store_scan(
     settings = get_settings()
     cursor = await db.execute(
         """INSERT INTO scans
-           (image_path, has_food, detected_items, matched_foods, advice,
-            verdict, model_detect, model_identify, model_advice, error)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           (image_path, query_text, has_food, detected_items, matched_foods,
+            advice, verdict, model_detect, model_identify, model_advice, error)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             image_path,
+            query_text,
             1 if has_food else (0 if has_food is False else None),
             json.dumps(detected),
             json.dumps(matched),
@@ -143,6 +145,60 @@ async def _store_scan(
     )
     await db.commit()
     return cursor.lastrowid
+
+
+@router.post("/scan/text", dependencies=[Depends(rate_limit_scan)])
+async def create_text_scan(request: Request, db=Depends(get_db)):
+    form = await request.form()
+    text = (form.get("food") or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Enter what you plan to eat")
+    if len(text) > 1000:
+        raise HTTPException(status_code=400, detail="That description is too long (max 1000 chars)")
+
+    items = await llm.identify_foods_from_text(text)
+    if items is None:
+        scan_id = await _store_scan(
+            db,
+            image_path=None,
+            query_text=text,
+            has_food=None,
+            detected=[],
+            matched=[],
+            verdict="error",
+            error="Could not analyze that (LLM not reachable or not configured).",
+        )
+        return _redirect(f"/scan/{scan_id}")
+    if not items:
+        scan_id = await _store_scan(
+            db,
+            image_path=None,
+            query_text=text,
+            has_food=False,
+            detected=[],
+            matched=[],
+            verdict="no_food",
+            error="",
+        )
+        return _redirect(f"/scan/{scan_id}")
+
+    rows = await db.execute_fetchall("SELECT * FROM foods ORDER BY name")
+    foods = [dict(r) for r in rows]
+    matched = matcher.match_detected(items, foods)
+    verdict = matcher.overall_verdict(matched)
+    advice, _ = await llm.generate_advice(items, matched)
+
+    scan_id = await _store_scan(
+        db,
+        image_path=None,
+        query_text=text,
+        has_food=True,
+        detected=items,
+        matched=matched,
+        verdict=verdict,
+        advice=advice,
+    )
+    return _redirect(f"/scan/{scan_id}")
 
 
 @router.get("/scan/{scan_id}")

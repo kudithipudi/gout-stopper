@@ -34,11 +34,15 @@ def fake_llm(monkeypatch):
     """Point the scan router's LLM helpers at canned responses, so tests never
     hit the network."""
 
-    def _install(detect=None, identify=None, advice=None):
+    def _install(detect=None, identify=None, identify_text=None, advice=None):
         if detect is not None:
             monkeypatch.setattr("app.routers.scan.llm.detect_food", _wrap(detect))
         if identify is not None:
             monkeypatch.setattr("app.routers.scan.llm.identify_foods", _wrap(identify))
+        if identify_text is not None:
+            monkeypatch.setattr(
+                "app.routers.scan.llm.identify_foods_from_text", _wrap(identify_text)
+            )
         if advice is not None:
             monkeypatch.setattr("app.routers.scan.llm.generate_advice", _wrap(advice))
 

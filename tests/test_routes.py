@@ -29,6 +29,14 @@ def _upload(client):
     )
 
 
+def _text_scan(client, food="a cheeseburger with fries"):
+    return client.post(
+        "/scan/text",
+        data={"food": food},
+        follow_redirects=False,
+    )
+
+
 # --- public pages ---------------------------------------------------------
 
 
@@ -76,7 +84,7 @@ def test_scan_no_food(anon_client, fake_llm):
 
     page = anon_client.get(f"/scan/{sid}")
     assert page.status_code == 200
-    assert "No food detected" in page.text
+    assert "No food found" in page.text
 
 
 def test_scan_avoid_verdict(anon_client, fake_llm):
@@ -138,6 +146,66 @@ def test_scan_rate_invalid(anon_client, fake_llm):
 
     assert anon_client.post(f"/scan/{sid}/rate", data={"rating": "meh"}).status_code == 400
     assert anon_client.post("/scan/9999/rate", data={"rating": "good"}).status_code == 404
+
+
+# --- text scan ------------------------------------------------------------
+
+
+def test_text_scan_requires_text(anon_client):
+    resp = anon_client.post("/scan/text", follow_redirects=False)
+    assert resp.status_code == 400
+    resp = anon_client.post("/scan/text", data={"food": "   "}, follow_redirects=False)
+    assert resp.status_code == 400
+
+
+def test_text_scan_rejects_overlong_text(anon_client):
+    resp = anon_client.post(
+        "/scan/text",
+        data={"food": "x" * 1001},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 400
+
+
+def test_text_scan_verdict(anon_client, fake_llm):
+    async def identify_text(text):
+        return [{"name": "beer", "confidence": 0.98}, {"name": "salmon", "confidence": 0.9}]
+
+    async def advice(*a):
+        return "Skip the beer; the salmon is fine in moderation.", "avoid"
+
+    fake_llm(identify_text=identify_text, advice=advice)
+    resp = _text_scan(anon_client, food="beer and salmon for dinner")
+    assert resp.status_code == 303
+    sid = scan_id_from(resp)
+
+    page = anon_client.get(f"/scan/{sid}")
+    assert page.status_code == 200
+    assert "beer and salmon for dinner" in page.text  # shows what they asked about
+    assert "avoid" in page.text
+    assert "beer" in page.text.lower()
+
+
+def test_text_scan_nothing_identified(anon_client, fake_llm):
+    fake_llm(identify_text=lambda text: [])
+    resp = _text_scan(anon_client, food="nothing much")
+    assert resp.status_code == 303
+    sid = scan_id_from(resp)
+
+    page = anon_client.get(f"/scan/{sid}")
+    assert page.status_code == 200
+    assert "No food found" in page.text
+
+
+def test_text_scan_llm_down(anon_client, fake_llm):
+    fake_llm(identify_text=lambda text: None)
+    resp = _text_scan(anon_client)
+    assert resp.status_code == 303
+    sid = scan_id_from(resp)
+
+    page = anon_client.get(f"/scan/{sid}")
+    assert page.status_code == 200
+    assert "couldn't analyze" in page.text.lower()
 
 
 # --- admin ----------------------------------------------------------------

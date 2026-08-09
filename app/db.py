@@ -153,11 +153,25 @@ async def init_db(db_path: str | None = None) -> None:
     try:
         schema = _SCHEMA_PATH.read_text()
         await conn.executescript(schema)
+        await _migrate(conn)
         await _seed_foods(conn)
         await conn.commit()
         logger.info("Database schema applied")
     finally:
         await conn.close()
+
+
+async def _migrate(conn: aiosqlite.Connection) -> None:
+    """Additive migrations for databases created before a column existed.
+    CREATE TABLE IF NOT EXISTS never touches existing tables, so schema
+    additions need an explicit ALTER here."""
+    cols = {
+        row["name"]
+        for row in await conn.execute_fetchall("PRAGMA table_info(scans)")
+    }
+    if "query_text" not in cols:
+        await conn.execute("ALTER TABLE scans ADD COLUMN query_text TEXT")
+        logger.info("Migration: added scans.query_text column")
 
 
 async def _seed_foods(conn: aiosqlite.Connection) -> None:
