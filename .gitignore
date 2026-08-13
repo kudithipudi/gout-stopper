@@ -7,3 +7,4 @@ data/
 .env
 htmlcov/
 .pytest_cache/
+tailwindcss
