@@ -41,11 +41,11 @@ Then open http://127.0.0.1:8000/. The app also works behind a subpath: set
 
 ### Rebuilding Tailwind CSS
 
-Tailwind is compiled with the lab standalone CLI into the committed
-`app/static/css/app.css` (no CDN). After editing templates/classes, rebuild:
+Tailwind is compiled with the standalone CLI (vendored at `./tailwindcss`) into the
+committed `app/static/css/app.css` (no CDN). After editing templates/classes, rebuild:
 
 ```
-/var/www/tailwindcss -i app/static/css/input.css -o app/static/css/app.css --minify
+./tailwindcss -i app/static/css/input.css -o app/static/css/app.css --minify
 ```
 
 Alpine.js is vendored (pinned) at `app/static/js/alpine.min.js`.
