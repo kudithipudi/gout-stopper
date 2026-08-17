@@ -9,7 +9,7 @@ from fastapi.templating import Jinja2Templates
 from PIL import Image, UnidentifiedImageError
 
 from app.config import get_settings
-from app.db import get_db, get_scan
+from app.db import check_and_record_rate_limit, get_db, get_scan
 from app.services import llm, matcher
 from app.services import ratelimit
 
@@ -23,14 +23,17 @@ def _redirect(path: str) -> RedirectResponse:
     return RedirectResponse(f"{get_settings().root_path}{path}", status_code=303)
 
 
-def rate_limit_scan(request: Request) -> None:
+async def rate_limit_scan(request: Request, db=Depends(get_db)) -> None:
     """FastAPI dependency: caps /scan requests per client IP. Reads the limit
     from get_settings() on every call (settings are deliberately not cached),
     so tests that monkeypatch SCAN_RATE_LIMIT_PER_MINUTE take effect
-    immediately."""
-    key = request.client.host if request.client else "unknown"
+    immediately. Shares a "scan" bucket with /scan/text, same as before."""
+    ip = ratelimit.client_ip(request)
     limit = get_settings().scan_rate_limit_per_minute
-    if not ratelimit.check(key, limit):
+    ok = await check_and_record_rate_limit(
+        db, ip=ip, route="scan", limit=limit, window_seconds=60
+    )
+    if not ok:
         raise HTTPException(
             status_code=429, detail="Too many scans — please wait a bit and try again."
         )

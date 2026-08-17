@@ -1,38 +1,27 @@
-"""Tiny in-process rate limiter.
+"""Client IP extraction for per-IP rate limiting.
 
-This app runs as a single gunicorn worker with no Redis/external infra, so a
-plain module-level dict is sufficient — state just needs to survive across
-requests within this one process, not across restarts or workers.
-
-Sliding-window-by-log: for each key (client IP) we keep a list of the
-monotonic timestamps of recent requests and drop anything older than the
-window before checking/appending. Good enough for a handful of requests per
-minute; not meant to scale beyond that.
+Storage lives in the rate_limit_hits SQLite table (see
+app.db.check_and_record_rate_limit) rather than an in-process counter:
+gunicorn workers don't share memory, so an in-process dict under-counts
+whenever there's more than one worker, and even at one worker a restart
+silently resets everyone's window.
 """
 
-import time
-from collections import defaultdict
-
-WINDOW_SECONDS = 60.0
-
-# key -> list of request timestamps (time.monotonic()) within the last window.
-_hits: dict[str, list[float]] = defaultdict(list)
+from fastapi import Request
 
 
-def reset() -> None:
-    """Clear all rate-limit state. Used by tests to get an isolated start."""
-    _hits.clear()
+def client_ip(request: Request) -> str:
+    """Extract the real client IP from proxy headers.
 
-
-def check(key: str, limit: int, *, now: float | None = None) -> bool:
-    """Record a hit for `key` and return True if it's within `limit` per
-    WINDOW_SECONDS, or False if the caller should be rate-limited."""
-    now = time.monotonic() if now is None else now
-    cutoff = now - WINDOW_SECONDS
-    hits = [t for t in _hits[key] if t > cutoff]
-    if len(hits) >= limit:
-        _hits[key] = hits
-        return False
-    hits.append(now)
-    _hits[key] = hits
-    return True
+    Gunicorn is bound to a unix socket behind nginx, so request.client is
+    often empty and, when present, isn't the visitor. nginx sets
+    X-Forwarded-For/X-Real-IP on every proxied location, so those take
+    priority over the raw socket peer.
+    """
+    fwd = request.headers.get("x-forwarded-for")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    real_ip = request.headers.get("x-real-ip")
+    if real_ip:
+        return real_ip
+    return request.client.host if request.client else "unknown"
