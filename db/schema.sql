@@ -15,6 +15,17 @@ CREATE TABLE IF NOT EXISTS foods (
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_foods_name ON foods (name COLLATE NOCASE);
 
+-- Sliding-window log backing per-IP rate limiting (see
+-- app/db.py:check_and_record_rate_limit). One row per hit, not fixed buckets.
+CREATE TABLE IF NOT EXISTS rate_limit_hits (
+    ip TEXT NOT NULL,
+    route TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_rate_limit_hits_route_ip_time
+    ON rate_limit_hits (route, ip, created_at);
+
 -- One row per photo scan. detected/matched payloads are JSON text; rating lets
 -- users flag a scan as good/bad so the admin can measure accuracy over time.
 CREATE TABLE IF NOT EXISTS scans (

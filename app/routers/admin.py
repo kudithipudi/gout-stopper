@@ -5,7 +5,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app.config import get_settings
-from app.db import get_db
+from app.db import check_and_record_rate_limit, get_db
 from app.services import csrf, ratelimit
 
 router = APIRouter(prefix="/admin")
@@ -29,7 +29,7 @@ def require_admin(request: Request) -> bool:
     return True
 
 
-def rate_limit_login(request: Request) -> None:
+async def rate_limit_login(request: Request, db=Depends(get_db)) -> None:
     """Throttle POSTs to the login endpoint per client IP.
 
     Deliberately counts *every* attempt, successful or not — this is a rate cap
@@ -39,12 +39,15 @@ def rate_limit_login(request: Request) -> None:
     their budget. A legitimate human fumbling their password a few times stays
     well under the limit.
 
-    The key is prefixed "login:" so it gets its own bucket, separate from the
-    bare-IP keys /scan uses.
+    Uses its own "admin_login" route bucket, separate from the "scan" bucket
+    /scan and /scan/text use.
     """
-    host = request.client.host if request.client else "unknown"
+    ip = ratelimit.client_ip(request)
     limit = get_settings().admin_login_rate_limit_per_minute
-    if not ratelimit.check(f"login:{host}", limit):
+    ok = await check_and_record_rate_limit(
+        db, ip=ip, route="admin_login", limit=limit, window_seconds=60
+    )
+    if not ok:
         raise HTTPException(
             status_code=429,
             detail="Too many login attempts — please wait a bit and try again.",

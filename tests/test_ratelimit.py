@@ -1,18 +1,31 @@
+import sqlite3
+
 import pytest_asyncio
 from fastapi.testclient import TestClient
 
 from app.db import init_db
-from app.services import ratelimit
 from tests.conftest import TEST_ADMIN_PASSWORD, csrf_token_from, scan_id_from
 from tests.test_routes import FAKE_JPEG
+
+
+def _age_hits(db_path, seconds: int) -> None:
+    """Backdate every recorded hit, simulating `seconds` of wall-clock time
+    passing so a sliding window can be observed to reset."""
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        "UPDATE rate_limit_hits SET created_at ="
+        " strftime('%Y-%m-%dT%H:%M:%SZ', created_at, ?)",
+        (f"-{seconds} seconds",),
+    )
+    conn.commit()
+    conn.close()
 
 
 @pytest_asyncio.fixture
 async def limited_client(tmp_path, monkeypatch):
     """Same shape as anon_client, but with a tiny rate limit so we can
-    actually trip it, and with the shared in-process limiter state cleared
-    before and after so this test doesn't leak into (or get polluted by)
-    other tests sharing the same TestClient "IP"."""
+    actually trip it. Each test gets its own tmp_path database, so there's
+    no shared state to reset between tests."""
     db_path = tmp_path / "app-test.db"
     monkeypatch.setenv("DB_PATH", str(db_path))
     monkeypatch.setenv("UPLOADS_DIR", str(tmp_path / "uploads"))
@@ -25,10 +38,9 @@ async def limited_client(tmp_path, monkeypatch):
 
     from app.main import app
 
-    ratelimit.reset()
     with TestClient(app) as tc:
+        tc.db_path = db_path
         yield tc
-    ratelimit.reset()
 
 
 @pytest_asyncio.fixture
@@ -46,10 +58,9 @@ async def login_limited_client(tmp_path, monkeypatch):
 
     from app.main import app
 
-    ratelimit.reset()
     with TestClient(app) as tc:
+        tc.db_path = db_path
         yield tc
-    ratelimit.reset()
 
 
 def _upload(client):
@@ -75,21 +86,40 @@ def test_scan_rate_limit_trips_on_third_request(limited_client, fake_llm):
     assert "too many scans" in third.text.lower()
 
 
-def test_scan_rate_limit_resets_between_windows(limited_client, fake_llm, monkeypatch):
-    import time
-
+def test_scan_rate_limit_resets_between_windows(limited_client, fake_llm):
     fake_llm(detect=lambda *a: {"has_food": False, "reason": "nothing edible"})
 
     assert _upload(limited_client).status_code == 303
     assert _upload(limited_client).status_code == 303
     assert _upload(limited_client).status_code == 429
 
-    # Simulate the window elapsing by fast-forwarding the monotonic clock
-    # the limiter reads from.
-    real_monotonic = time.monotonic
-    monkeypatch.setattr(time, "monotonic", lambda: real_monotonic() + 61)
+    # Simulate the window elapsing by backdating the recorded hits.
+    _age_hits(limited_client.db_path, seconds=61)
 
     assert _upload(limited_client).status_code == 303
+
+
+def test_scan_rate_limit_honors_x_forwarded_for(limited_client, fake_llm):
+    """Two distinct X-Forwarded-For values must get independent rate-limit
+    buckets, proving the client IP is read from the proxy header rather than
+    falling back to a single shared value (e.g. the test transport's socket
+    peer, which is the same for every request)."""
+    fake_llm(detect=lambda *a: {"has_food": False, "reason": "nothing edible"})
+
+    def _upload_as(ip):
+        return limited_client.post(
+            "/scan",
+            files={"image": ("plate.jpg", FAKE_JPEG, "image/jpeg")},
+            headers={"X-Forwarded-For": ip},
+            follow_redirects=False,
+        )
+
+    assert _upload_as("1.1.1.1").status_code == 303
+    assert _upload_as("1.1.1.1").status_code == 303
+    assert _upload_as("1.1.1.1").status_code == 429
+
+    # A different forwarded IP still has a fresh bucket.
+    assert _upload_as("2.2.2.2").status_code == 303
 
 
 # --- admin login throttle -------------------------------------------------
@@ -129,14 +159,11 @@ def test_admin_login_throttle_uses_its_own_bucket(login_limited_client, fake_llm
     assert _login(login_limited_client).status_code == 303
 
 
-def test_admin_login_throttle_resets_between_windows(login_limited_client, monkeypatch):
-    import time
-
+def test_admin_login_throttle_resets_between_windows(login_limited_client):
     for _ in range(3):
         assert _login(login_limited_client, "wrong-password").status_code == 401
     assert _login(login_limited_client).status_code == 429
 
-    real_monotonic = time.monotonic
-    monkeypatch.setattr(time, "monotonic", lambda: real_monotonic() + 61)
+    _age_hits(login_limited_client.db_path, seconds=61)
 
     assert _login(login_limited_client).status_code == 303
