@@ -10,15 +10,25 @@
   </div>
 
   <!-- Mode tabs -->
-  <div class="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1" role="tablist" aria-label="How you want to check your food">
-    <button type="button" role="tab" :aria-selected="mode === 'photo'"
+  <div class="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1" role="tablist" aria-label="How you want to check your food" aria-orientation="horizontal">
+    <button type="button" role="tab" id="tab-photo" aria-controls="panel-photo"
+            :aria-selected="mode === 'photo'" :tabindex="mode === 'photo' ? 0 : -1"
             @click="mode = 'photo'"
+            @keydown.arrow-left.prevent="switchTab('photo')"
+            @keydown.arrow-right.prevent="switchTab('text')"
+            @keydown.home.prevent="switchTab('photo')"
+            @keydown.end.prevent="switchTab('text')"
             class="rounded-lg px-4 py-2 text-sm font-semibold transition"
             :class="mode === 'photo' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'">
       📷 Take a photo
     </button>
-    <button type="button" role="tab" :aria-selected="mode === 'text'"
+    <button type="button" role="tab" id="tab-text" aria-controls="panel-text"
+            :aria-selected="mode === 'text'" :tabindex="mode === 'text' ? 0 : -1"
             @click="mode = 'text'"
+            @keydown.arrow-left.prevent="switchTab('photo')"
+            @keydown.arrow-right.prevent="switchTab('text')"
+            @keydown.home.prevent="switchTab('photo')"
+            @keydown.end.prevent="switchTab('text')"
             class="rounded-lg px-4 py-2 text-sm font-semibold transition"
             :class="mode === 'text' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'">
       ⌨️ Type the food
@@ -26,8 +36,10 @@
   </div>
 
   <!-- Photo mode -->
-  <form x-show="mode === 'photo'" x-cloak action="{{ prefix }}/scan" method="post" enctype="multipart/form-data"
+  <form x-show="mode === 'photo'" x-cloak role="tabpanel" id="panel-photo" aria-labelledby="tab-photo" tabindex="-1"
+        action="{{ prefix }}/scan" method="post" enctype="multipart/form-data"
         class="space-y-4"
+        :aria-busy="submitting"
         @submit="onSubmit($event)">
     <input type="file" name="image" id="photo" accept="image/*" capture="environment"
            class="sr-only" @change="onFile($event)" />
@@ -51,7 +63,7 @@
     <!-- Preview state -->
     <div x-show="preview" x-cloak class="space-y-4">
       <div class="rounded-2xl overflow-hidden border border-slate-200 bg-white">
-        <img :src="preview" alt="Your photo preview" class="w-full max-h-96 object-cover" />
+        <img :src="preview" alt="Your photo preview" class="w-full max-h-96 aspect-[4/3] object-cover" />
       </div>
       <div class="flex flex-col sm:flex-row gap-3">
         <button type="submit"
@@ -67,16 +79,18 @@
   </form>
 
   <!-- Text mode -->
-  <form x-show="mode === 'text'" x-cloak action="{{ prefix }}/scan/text" method="post"
+  <form x-show="mode === 'text'" x-cloak role="tabpanel" id="panel-text" aria-labelledby="tab-text" tabindex="-1"
+        action="{{ prefix }}/scan/text" method="post"
         class="space-y-4"
+        :aria-busy="submitting"
         @submit="startSubmit()">
     <div class="rounded-2xl border border-slate-200 bg-white p-5 space-y-3">
       <label for="food" class="block text-sm font-semibold text-slate-700">
         What are you planning to eat?
       </label>
-      <textarea id="food" name="food" rows="3" maxlength="1000" required
-                placeholder="e.g. a cheeseburger with fries and a beer, or chicken curry with rice"
-                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+<textarea id="food" name="food" rows="3" maxlength="1000" required autocomplete="off"
+          placeholder="e.g. a cheeseburger with fries and a beer, or chicken curry with rice"
+          class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
       <button type="submit"
               class="w-full rounded-lg bg-indigo-600 px-5 py-3 text-white font-semibold text-base transition hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
         Check my food
@@ -85,8 +99,8 @@
   </form>
 
   <!-- Analyzing overlay -->
-  <div x-show="submitting" x-cloak class="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-white/90 backdrop-blur-sm">
-    <span class="inline-block h-12 w-12 rounded-full border-4 border-indigo-600 border-t-transparent animate-spin"></span>
+  <div x-show="submitting" x-cloak role="status" aria-live="polite" class="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-white/90 backdrop-blur-sm">
+    <span class="inline-block h-12 w-12 rounded-full border-4 border-indigo-600 border-t-transparent animate-spin motion-reduce:animate-none"></span>
     <p class="text-slate-700 font-semibold">Checking your food…</p>
     <p class="text-sm text-slate-400">This takes a few seconds.</p>
   </div>
@@ -105,6 +119,13 @@ function foodCheck() {
     submitting: false,
     _previewUrl: null,
     uploadFile: null,
+    switchTab(next) {
+      this.mode = next;
+      this.$nextTick(() => {
+        const tab = this.$root.querySelector('#tab-' + next);
+        if (tab) tab.focus();
+      });
+    },
     async onFile(event) {
       const file = event.target.files[0];
       if (!file) return;

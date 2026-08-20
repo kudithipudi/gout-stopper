@@ -5,3 +5,10 @@
 [x-cloak] {
   display: none !important;
 }
+
+button,
+[role="button"],
+label[for] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}

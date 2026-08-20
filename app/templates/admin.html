@@ -45,7 +45,7 @@
       <div>
         <label for="category" class="block text-sm font-medium text-slate-700">Category</label>
         <select id="category" name="category"
-                class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500">
           <option value="avoid">Avoid</option>
           <option value="limit">Limit</option>
           <option value="ok">OK</option>
@@ -150,7 +150,7 @@
               {% elif s.rating == 'bad' %}<span class="text-rose-600">👎 bad</span>
               {% else %}<span class="text-slate-300">—</span>{% endif %}
             </td>
-            <td class="px-5 py-2.5 text-slate-400">{{ s.created_at[:16] }} UTC</td>
+            <td class="px-5 py-2.5 text-slate-400" data-created-at="{{ s.created_at }}"></td>
           </tr>
           {% endfor %}
         </tbody>
@@ -159,4 +159,16 @@
   </div>
 </div>
 
+<script>
+  document.querySelectorAll('[data-created-at]').forEach((el) => {
+    const d = new Date(el.dataset.createdAt);
+    if (!isNaN(d)) {
+      el.textContent = new Intl.DateTimeFormat(undefined, {
+        year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+      }).format(d);
+    } else {
+      el.textContent = el.dataset.createdAt;
+    }
+  });
+</script>
 {% endblock %}
