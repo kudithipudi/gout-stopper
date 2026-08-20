@@ -3,12 +3,15 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
+<meta name="color-scheme" content="light" />
+<meta name="theme-color" content="#f8fafc" />
 <title>{% block title %}GoutStopper — check what's on your plate{% endblock %}</title>
 <link rel="icon" href="/favicon.ico" />
 <link rel="stylesheet" href="{{ prefix }}/static/css/app.css" />
 <script defer src="{{ prefix }}/static/js/alpine.min.js"></script>
 </head>
 <body class="bg-slate-50 text-slate-900 font-sans antialiased">
+<a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:rounded-lg focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-indigo-600 focus:shadow-sm focus:ring-2 focus:ring-indigo-500">Skip to content</a>
 <div class="min-h-screen bg-slate-50 text-slate-900">
 
   <header class="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200">
@@ -31,7 +34,7 @@
     </div>
   </header>
 
-  <main class="max-w-[1100px] mx-auto px-4 sm:px-6 py-8 space-y-8">
+  <main id="main" tabindex="-1" class="max-w-[1100px] mx-auto px-4 sm:px-6 py-8 space-y-8 scroll-mt-20 focus:outline-none">
     {% block breadcrumb %}{% endblock %}
     {% block body %}{% endblock %}
   </main>
