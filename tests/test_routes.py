@@ -47,6 +47,15 @@ def test_index_ok(anon_client):
     assert "capture" in resp.text
 
 
+def test_index_has_single_image_form_field(anon_client):
+    """The camera and gallery-upload inputs must not both carry name="image" —
+    duplicate keys let the browser submit an empty file field alongside the
+    real one, and FastAPI's form parsing resolves duplicates to the last
+    value, silently dropping the real upload and causing a 400."""
+    resp = anon_client.get("/")
+    assert resp.text.count('name="image"') == 1
+
+
 def test_about_ok(anon_client):
     resp = anon_client.get("/about")
     assert resp.status_code == 200

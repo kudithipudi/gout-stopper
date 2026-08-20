@@ -41,10 +41,11 @@
         class="space-y-4"
         :aria-busy="submitting"
         @submit="onSubmit($event)">
-    <input type="file" name="image" id="photo-camera" accept="image/*" capture="environment"
+    <input type="file" id="photo-camera" accept="image/*" capture="environment"
            class="sr-only" @change="onFile($event)" />
-    <input type="file" name="image" id="photo-upload" accept="image/*"
+    <input type="file" id="photo-upload" accept="image/*"
            class="sr-only" @change="onFile($event)" />
+    <input type="file" name="image" id="photo-final" tabindex="-1" aria-hidden="true" class="hidden" />
 
     <!-- Empty state: camera or upload choice -->
     <div x-show="!preview" x-cloak class="space-y-3">
@@ -151,7 +152,7 @@ function foodCheck() {
     onSubmit(event) {
       this.submitting = true;
       if (!this.uploadFile) return;
-      const input = event.target.querySelector('input[name="image"]');
+      const input = event.target.querySelector('#photo-final');
       if (input) {
         const dt = new DataTransfer();
         dt.items.add(this.uploadFile);
