@@ -58,5 +58,76 @@
     </div>
   </footer>
 </div>
+
+<div x-data="installBanner()" x-show="visible" x-cloak x-transition
+     class="fixed inset-x-0 bottom-0 z-40 p-4 sm:hidden" role="region" aria-label="Install GoutStopper">
+  <div class="mx-auto max-w-md rounded-2xl border border-slate-200 bg-white shadow-lg p-4 flex items-start gap-3">
+    <img src="{{ prefix }}/static/icons/icon-192.png" alt="" class="h-10 w-10 rounded-lg flex-shrink-0" />
+    <div class="flex-1 min-w-0">
+      <p class="text-sm font-semibold text-slate-900">Install GoutStopper</p>
+      <p class="text-xs text-slate-500 mt-0.5" x-show="!isIos">Add it to your home screen for quick, full-screen access.</p>
+      <p class="text-xs text-slate-500 mt-0.5" x-show="isIos" x-cloak>
+        Tap <span aria-hidden="true">&#x2304;</span> Share, then "Add to Home Screen".
+      </p>
+      <div class="mt-3 flex gap-2" x-show="!isIos">
+        <button type="button" @click="install()" class="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500 transition">Install</button>
+        <button type="button" @click="dismiss()" class="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-700 transition">Not now</button>
+      </div>
+      <div class="mt-3" x-show="isIos" x-cloak>
+        <button type="button" @click="dismiss()" class="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-700 transition">Got it</button>
+      </div>
+    </div>
+    <button type="button" @click="dismiss()" aria-label="Dismiss" class="text-slate-400 hover:text-slate-600 transition">&times;</button>
+  </div>
+</div>
+<script>
+function installBanner() {
+  const DISMISS_DAYS = 14;
+
+  return {
+    visible: false,
+    deferredPrompt: null,
+    isIos: false,
+    init() {
+      const standalone =
+        window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+      if (standalone) return;
+
+      const dismissedAt = localStorage.getItem("pwaInstallDismissedAt");
+      if (dismissedAt && Date.now() - Number(dismissedAt) < DISMISS_DAYS * 24 * 60 * 60 * 1000) return;
+
+      const ua = navigator.userAgent;
+      this.isIos =
+        /iphone|ipad|ipod/i.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+      const isAndroid = /android/i.test(ua);
+      if (!this.isIos && !isAndroid) return;
+
+      // Chrome/Android: capture the native prompt and drive it from our own
+      // button instead — the automatic mini-infobar is unreliable and often
+      // suppressed by engagement heuristics.
+      window.addEventListener("beforeinstallprompt", (event) => {
+        event.preventDefault();
+        this.deferredPrompt = event;
+        this.visible = true;
+      });
+
+      // iOS Safari never fires beforeinstallprompt, so show the manual
+      // "Add to Home Screen" instructions instead.
+      if (this.isIos) this.visible = true;
+    },
+    async install() {
+      if (!this.deferredPrompt) return;
+      this.deferredPrompt.prompt();
+      await this.deferredPrompt.userChoice;
+      this.deferredPrompt = null;
+      this.visible = false;
+    },
+    dismiss() {
+      this.visible = false;
+      localStorage.setItem("pwaInstallDismissedAt", String(Date.now()));
+    },
+  };
+}
+</script>
 </body>
 </html>

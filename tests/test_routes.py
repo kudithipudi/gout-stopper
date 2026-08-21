@@ -96,6 +96,12 @@ def test_base_page_links_manifest_and_registers_sw(anon_client):
     assert "serviceWorker" in resp.text
 
 
+def test_base_page_has_install_banner(anon_client):
+    resp = anon_client.get("/")
+    assert "installBanner()" in resp.text
+    assert "beforeinstallprompt" in resp.text
+
+
 # --- scan lifecycle -------------------------------------------------------
 
 
