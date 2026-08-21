@@ -67,6 +67,35 @@ def test_unknown_scan_404(anon_client):
     assert anon_client.get("/scan/9999").status_code == 404
 
 
+def test_offline_ok(anon_client):
+    resp = anon_client.get("/offline")
+    assert resp.status_code == 200
+    assert "offline" in resp.text.lower()
+
+
+def test_manifest(anon_client):
+    resp = anon_client.get("/manifest.webmanifest")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("application/manifest+json")
+    body = resp.json()
+    assert body["name"] == "GoutStopper"
+    assert body["display"] == "standalone"
+    assert len(body["icons"]) >= 2
+
+
+def test_service_worker(anon_client):
+    resp = anon_client.get("/sw.js")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("application/javascript")
+    assert "addEventListener" in resp.text
+
+
+def test_base_page_links_manifest_and_registers_sw(anon_client):
+    resp = anon_client.get("/")
+    assert 'rel="manifest"' in resp.text
+    assert "serviceWorker" in resp.text
+
+
 # --- scan lifecycle -------------------------------------------------------
 
 

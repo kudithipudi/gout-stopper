@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}You're offline — GoutStopper{% endblock %}
+{% block body %}
+
+<div class="max-w-md mx-auto text-center py-12">
+  <div class="text-5xl mb-4">📡</div>
+  <h1 class="text-xl font-bold tracking-tight">You're offline</h1>
+  <p class="text-slate-500 mt-2">
+    GoutStopper needs a connection to scan food or load new pages. Check your
+    connection and try again.
+  </p>
+  <a href="{{ prefix }}/" class="inline-block mt-6 rounded-lg bg-indigo-600 px-5 py-2.5 text-white font-semibold text-sm transition hover:bg-indigo-500">
+    Try again
+  </a>
+</div>
+
+{% endblock %}
