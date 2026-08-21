@@ -21,6 +21,9 @@ trigger gout attacks. Educational tool — not medical advice.
 - Admin area (password login) to add/delete foods and review recent scans +
   ratings.
 - Basic gout information page with a clear "not medical advice" disclaimer.
+- Installable PWA: web app manifest + service worker cache the shell (home,
+  about, CSS/JS, icons) for offline access and add-to-home-screen support.
+  Scans, admin, and uploads always go straight to the network.
 
 ## Stack
 

@@ -4,11 +4,23 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <meta name="color-scheme" content="light" />
-<meta name="theme-color" content="#f8fafc" />
+<meta name="theme-color" content="#4f46e5" />
 <title>{% block title %}GoutStopper — check what's on your plate{% endblock %}</title>
-<link rel="icon" href="/favicon.ico" />
+<link rel="manifest" href="{{ prefix }}/manifest.webmanifest" />
+<link rel="icon" href="{{ prefix }}/static/favicon.ico" />
+<link rel="apple-touch-icon" href="{{ prefix }}/static/icons/apple-touch-icon.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="GoutStopper" />
 <link rel="stylesheet" href="{{ prefix }}/static/css/app.css" />
 <script defer src="{{ prefix }}/static/js/alpine.min.js"></script>
+<script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("{{ prefix }}/sw.js");
+    });
+  }
+</script>
 </head>
 <body class="bg-slate-50 text-slate-900 font-sans antialiased">
 <a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:rounded-lg focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-indigo-600 focus:shadow-sm focus:ring-2 focus:ring-indigo-500">Skip to content</a>
