@@ -1,6 +1,7 @@
 import inspect
 import re
 
+import httpx
 import pytest
 import pytest_asyncio
 
@@ -51,8 +52,8 @@ def fake_llm(monkeypatch):
 
 @pytest_asyncio.fixture
 async def anon_client(tmp_path, monkeypatch):
-    """A TestClient with no admin session — for exercising what a visitor who
-    hasn't logged in can and can't reach."""
+    """An httpx client with no admin session — for exercising what a visitor
+    who hasn't logged in can and can't reach."""
     db_path = tmp_path / "app-test.db"
     monkeypatch.setenv("DB_PATH", str(db_path))
     monkeypatch.setenv("UPLOADS_DIR", str(tmp_path / "uploads"))
@@ -60,21 +61,21 @@ async def anon_client(tmp_path, monkeypatch):
     monkeypatch.setenv("ADMIN_PASSWORD", TEST_ADMIN_PASSWORD)
     monkeypatch.setenv("SESSION_SECRET", "test-session-secret")
     # High enough that the existing functional tests (which each make a
-    # handful of /scan calls, all reported from the same TestClient "IP")
+    # handful of /scan calls, all reported from the same client "IP")
     # never trip the limiter. The limiter itself gets its own dedicated
     # tests in tests/test_ratelimit.py with a small override.
     monkeypatch.setenv("SCAN_RATE_LIMIT_PER_MINUTE", "1000")
     # Likewise for the admin login throttle: every test logs in through the
-    # same TestClient "IP", so the production default of 5/min would start
+    # same client "IP", so the production default of 5/min would start
     # returning 429s partway through the suite. The throttle gets its own
     # dedicated test in tests/test_ratelimit.py with a small override.
     monkeypatch.setenv("ADMIN_LOGIN_RATE_LIMIT_PER_MINUTE", "1000")
     await init_db(str(db_path))
 
     from app.main import app
-    from fastapi.testclient import TestClient
 
-    with TestClient(app) as tc:
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as tc:
         yield tc
 
 
@@ -86,11 +87,11 @@ def csrf_token_from(html: str) -> str:
     return match.group(1)
 
 
-def login(tc) -> None:
+async def login(tc) -> None:
     """Do the full browser-shaped login: fetch the form to pick up a CSRF
     token (and the session cookie carrying it), then post it back."""
-    token = csrf_token_from(tc.get("/admin/login").text)
-    resp = tc.post(
+    token = csrf_token_from((await tc.get("/admin/login")).text)
+    resp = await tc.post(
         "/admin/login",
         data={"password": TEST_ADMIN_PASSWORD, "csrf_token": token},
         follow_redirects=False,
@@ -98,16 +99,16 @@ def login(tc) -> None:
     assert resp.status_code == 303
 
 
-def admin_csrf(tc) -> str:
+async def admin_csrf(tc) -> str:
     """The current CSRF token as rendered on the admin dashboard."""
-    return csrf_token_from(tc.get("/admin").text)
+    return csrf_token_from((await tc.get("/admin")).text)
 
 
 @pytest_asyncio.fixture
 async def client(anon_client):
-    """A TestClient already logged in to /admin (session cookie carries over
+    """A client already logged in to /admin (session cookie carries over
     to every subsequent request, same as a real browser)."""
-    login(anon_client)
+    await login(anon_client)
     return anon_client
 
 

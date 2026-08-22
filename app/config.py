@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     # of the single shared admin password pointless, high enough that a human
     # mistyping their password a few times isn't locked out.
     admin_login_rate_limit_per_minute: int = 5
+    log_level: str = "info"
 
 
 def get_settings() -> Settings:

@@ -1,9 +1,20 @@
+import os
+
 bind = "unix:/var/www/gout-stopper/gout-stopper.sock"
 workers = 1
 worker_class = "uvicorn.workers.UvicornWorker"
 chdir = "/var/www/gout-stopper"
-accesslog = "-"
-errorlog = "-"
+
+# Local files under app/logs/ rather than journald (see standards §7). Paths
+# resolve relative to chdir above.
+accesslog = "app/logs/access.log"
+errorlog = "app/logs/app.log"
+# Identical across apps so one tailing script sees the same columns everywhere:
+# timestamp, client IP, request line, status, response bytes, duration.
+access_log_format = '%(t)s %(h)s "%(r)s" %(s)s %(b)s %(L)ss'
+# Read from the process env: this file runs before the app boots and can't
+# import Settings.
+loglevel = os.environ.get("LOG_LEVEL", "info")
 
 # nginx proxies to this unix socket (see /etc/nginx/sites-enabled/lab.kudithipudi.org),
 # so the peer connection has no IP at all — uvicorn's default trusted-proxy check

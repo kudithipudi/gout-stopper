@@ -84,7 +84,24 @@ admin login + food CRUD.
 | `FOOD_DETECT_MODEL` | Model for "is there food?" gate. Default `openai/gpt-4o-mini`. |
 | `FOOD_IDENTIFY_MODEL` | Model for listing foods. Default `openai/gpt-4o-mini`. |
 | `ADVICE_MODEL` | Model for the takeaway text. Default `openai/gpt-4o-mini`. |
-| `LLM_TEMPERATURE` / `LLM_TIMEOUT` | Call tuning. |
+| `LLM_TEMPERATURE` / `LLM_TIMEOUT` | Call tuning. Default `0.0` / `120` seconds. |
+| `MAX_UPLOAD_BYTES` | Max photo upload size in bytes. Default `20971520` (20 MB). |
+| `SCAN_RATE_LIMIT_PER_MINUTE` | Per-IP cap on scan endpoints. Default `6`. |
+| `ADMIN_LOGIN_RATE_LIMIT_PER_MINUTE` | Per-IP cap on admin login attempts. Default `5`. |
+| `LOG_LEVEL` | App + gunicorn log verbosity (`info`, `debug`, ...). Default `info`. |
 
 Any OpenRouter model that accepts image content works (e.g.
 `google/gemini-2.0-flash`, `openai/gpt-4o`); per-purpose models can differ.
+
+## Logs
+
+Two files under `app/logs/` (gitignored, `www-data`-writable; the directory
+itself is tracked via `.gitkeep`):
+
+- `access.log` — gunicorn's access log, one line per HTTP request.
+- `app.log` — the app's console output plus gunicorn's error/boot log.
+
+Rotation is handled by the host-level `/etc/logrotate.d/lab-apps` policy — no
+per-app rotation. Change verbosity with `LOG_LEVEL` in `.env` and restart the
+service; a crash before gunicorn opens its log files still surfaces in journald
+(`journalctl -u gout-stopper`).

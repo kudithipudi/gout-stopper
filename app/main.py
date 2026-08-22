@@ -12,7 +12,12 @@ from app.config import get_settings
 from app.db import init_db
 from app.routers import admin, pages, scan
 
-logging.basicConfig(level=logging.INFO)
+settings = get_settings()
+# App logs inherit gunicorn's errorlog stream (app/logs/app.log) — see §7.
+logging.basicConfig(
+    level=settings.log_level.upper(),
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
 logger = logging.getLogger(__name__)
 
 
@@ -24,7 +29,6 @@ async def lifespan(app: FastAPI):
     yield
 
 
-settings = get_settings()
 # Ensure the writable dirs exist before the /uploads mount, which requires a
 # live directory at import time.
 Path(settings.db_path).parent.mkdir(parents=True, exist_ok=True)
@@ -67,6 +71,13 @@ templates.env.globals["prefix"] = settings.root_path
 app.include_router(pages.router)
 app.include_router(scan.router)
 app.include_router(admin.router)
+
+
+@app.get("/health")
+async def health():
+    # Unauthenticated, no DB or external calls — a stable target for uptime
+    # monitoring and deploy verification.
+    return {"status": "ok"}
 
 
 @app.exception_handler(HTTPException)
