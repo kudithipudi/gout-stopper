@@ -30,3 +30,27 @@ claude.md
 # OS junk
 .DS_Store
 Thumbs.db
+
+# coding agent config (local only)
+.claude/
+.claude.json
+AGENTS.md
+.mcp.json
+opencode.json
+.opencode/
+.codex/
+codex.md
+.cursorignore
+.windsurf/
+GEMINI.md
+.gemini/
+.github/copilot-instructions.md
+.copilot/
+.clinerules
+.cline/
+.roo/
+.kilocode/
+.trae/
+.serena/
+.continue/
+.codeium/
