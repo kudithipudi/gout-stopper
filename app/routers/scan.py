@@ -4,14 +4,17 @@ import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from PIL import Image, UnidentifiedImageError
+import pillow_heif
 
 from app.config import get_settings
 from app.db import check_and_record_rate_limit, get_db, get_scan
 from app.services import llm, matcher
 from app.services import ratelimit
+
+pillow_heif.register_heif_opener()
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -52,6 +55,7 @@ async def create_scan(request: Request, db=Depends(get_db)):
         raise HTTPException(status_code=400, detail="Image is too large (max 20 MB)")
 
     try:
+        fmt = Image.open(io.BytesIO(raw)).format
         Image.open(io.BytesIO(raw)).verify()
     except (UnidentifiedImageError, OSError, ValueError):
         raise HTTPException(
@@ -66,6 +70,17 @@ async def create_scan(request: Request, db=Depends(get_db)):
         ext = ".webp"
     elif mime == "image/gif":
         ext = ".gif"
+
+    if fmt == "HEIF":
+        # HEIC/HEIF photos (common on phones synced with iOS devices) aren't
+        # renderable in browsers or accepted by the vision LLM — convert to
+        # JPEG so both the stored file and the scan-detail preview work.
+        converted = Image.open(io.BytesIO(raw)).convert("RGB")
+        buf = io.BytesIO()
+        converted.save(buf, format="JPEG", quality=90)
+        raw = buf.getvalue()
+        mime = "image/jpeg"
+        ext = ".jpg"
 
     uploads = Path(get_settings().uploads_dir)
     uploads.mkdir(parents=True, exist_ok=True)
@@ -110,6 +125,36 @@ async def create_scan(request: Request, db=Depends(get_db)):
         advice=advice,
     )
     return _redirect(f"/scan/{scan_id}")
+
+
+@router.post("/scan/preview", dependencies=[Depends(rate_limit_scan)])
+async def preview_scan_image(request: Request):
+    """Returns a browser-safe JPEG thumbnail of an uploaded photo, for
+    formats the browser can't decode itself (e.g. HEIC/HEIF) — the client
+    calls this only when it already failed to render its own preview."""
+    form = await request.form()
+    upload = form.get("image")
+    if upload is None or not getattr(upload, "filename", ""):
+        raise HTTPException(status_code=400, detail="No image selected")
+    raw = await upload.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Empty image")
+    if len(raw) > get_settings().max_upload_bytes:
+        raise HTTPException(status_code=400, detail="Image is too large (max 20 MB)")
+
+    try:
+        img = Image.open(io.BytesIO(raw))
+        img.load()
+    except (UnidentifiedImageError, OSError, ValueError):
+        raise HTTPException(
+            status_code=400, detail="That doesn't look like a valid image — try a different photo."
+        )
+
+    img = img.convert("RGB")
+    img.thumbnail((640, 640))
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=80)
+    return Response(content=buf.getvalue(), media_type="image/jpeg")
 
 
 async def _store_scan(
