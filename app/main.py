@@ -68,6 +68,20 @@ app.add_middleware(
 templates = Jinja2Templates(directory="app/templates")
 templates.env.globals["prefix"] = settings.root_path
 
+
+@app.middleware("http")
+async def _no_store_dynamic(request: Request, call_next):
+    """Every HTML/API response is user- or state-specific (scan results, the
+    admin area, the rendered home page) — keep edge/CDN caches (Cloudflare
+    fronts this deploy) from serving a stale page after a release. Static
+    assets and stored uploads stay cacheable."""
+    response = await call_next(request)
+    path = request.url.path
+    if not (path.startswith("/static/") or path.startswith("/uploads/")):
+        response.headers.setdefault("Cache-Control", "no-store")
+    return response
+
+
 app.include_router(pages.router)
 app.include_router(scan.router)
 app.include_router(admin.router)

@@ -62,6 +62,17 @@ async def test_index_has_single_image_form_field(anon_client):
     assert resp.text.count('name="image"') == 1
 
 
+async def test_dynamic_pages_are_no_store_but_static_is_not(anon_client):
+    """Cloudflare fronts the deploy — rendered pages must not be edge-cached
+    (a release would otherwise serve stale HTML), while /static keeps caching."""
+    home = await anon_client.get("/")
+    assert home.headers.get("cache-control") == "no-store"
+
+    asset = await anon_client.get("/static/js/history.js")
+    assert asset.status_code == 200
+    assert asset.headers.get("cache-control") != "no-store"
+
+
 async def test_about_ok(anon_client):
     resp = await anon_client.get("/about")
     assert resp.status_code == 200
