@@ -1,4 +1,4 @@
-const CACHE_VERSION = "goutstopper-v1";
+const CACHE_VERSION = "goutstopper-v2";
 const PREFIX = "{{ prefix }}";
 const OFFLINE_URL = PREFIX + "/offline";
 
@@ -8,6 +8,7 @@ const PRECACHE_URLS = [
   OFFLINE_URL,
   PREFIX + "/static/css/app.css",
   PREFIX + "/static/js/alpine.min.js",
+  PREFIX + "/static/js/history.js",
   PREFIX + "/static/icons/icon-192.png",
   PREFIX + "/static/icons/icon-512.png",
 ];
