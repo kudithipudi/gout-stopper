@@ -9,17 +9,29 @@ trigger gout attacks. Educational tool — not medical advice.
 - Two ways to check food:
   - **Photo**: upload or capture a photo (mobile camera via `capture="environment"`).
   - **Text**: type what you plan to eat, e.g. "a cheeseburger with fries and a beer".
-- Three separate LLM purposes, each with its own configurable model:
-  1. **detect** — is there any food in the photo at all? If not, say so.
-  2. **identify** — list the distinct foods/drinks visible (or named in the text).
-  3. **advice** — a short, friendly takeaway written for someone prone to gout.
-- Detected items are matched **deterministically** (no LLM) against an
-  admin-managed list of gout-relevant foods in three categories:
-  **Avoid / Limit / OK**.
+- Separate LLM purposes, each with its own configurable model:
+  1. **analyze** (photo) — one vision call: is there food, and what is it?
+     (text scans use an **identify** call instead.)
+  2. **classify** — rate a food for gout risk when it's on no list (see below).
+  3. **advice** — a short, friendly, portion-aware takeaway for someone prone to gout.
+- Detected items are resolved in three cheap-to-expensive layers:
+  1. **Admin list** — deterministic string match (no LLM) against an
+     admin-managed list of gout foods in **Avoid / Limit / OK**.
+  2. **Learned list** — foods that visitors have 👍-confirmed after an LLM
+     estimate; consulted before paying for another call.
+  3. **LLM estimate** — anything still unmatched is rated by the `classify`
+     model, and shown with an "est." marker.
+- **Repeat scans are instant**: an identical photo/description reuses the most
+  recent result (within `SCAN_CACHE_MAX_AGE_HOURS`) with no LLM calls. The model
+  line-up is part of the cache key, so changing a model busts it.
 - Every scan is stored (image or typed text + results) and visitors can rate it
-  👍/👎 so the admin can measure accuracy over time.
-- Admin area (password login) to add/delete foods and review recent scans +
-  ratings.
+  👍/👎. A 👍 on an LLM-estimated food trains the **learned list**; the admin can
+  promote a learned food onto the authoritative list or dismiss it.
+- **Your recent checks**: the home page shows this browser's own recent scans
+  and an optional personal "foods that trigger you" list — all client-side in
+  `localStorage`, nothing sent to the server.
+- Admin area (password login) to add/delete foods, review the learned list, and
+  review recent scans + ratings.
 - Basic gout information page with a clear "not medical advice" disclaimer.
 - Installable PWA: web app manifest + service worker cache the shell (home,
   about, CSS/JS, icons) for offline access and add-to-home-screen support.
@@ -81,9 +93,13 @@ admin login + food CRUD.
 | `ROOT_PATH` | Public subpath, default `/gout-stopper`. |
 | `DB_PATH` | SQLite file, default `data/gout-stopper.db`. |
 | `UPLOADS_DIR` | Stored scan photos, default `data/uploads`. |
-| `FOOD_DETECT_MODEL` | Model for "is there food?" gate. Default `openai/gpt-4o-mini`. |
-| `FOOD_IDENTIFY_MODEL` | Model for listing foods. Default `openai/gpt-4o-mini`. |
+| `FOOD_DETECT_MODEL` | Model for the photo `analyze` call (food gate + identification). Default `openai/gpt-4o-mini`. |
+| `FOOD_IDENTIFY_MODEL` | Model for parsing typed food descriptions. Default `openai/gpt-4o-mini`. |
 | `ADVICE_MODEL` | Model for the takeaway text. Default `openai/gpt-4o-mini`. |
+| `GOUT_CLASSIFY_MODEL` | Model that rates an off-list food for gout risk. Default `openai/gpt-4o-mini`. |
+| `GOUT_CLASSIFY_ENABLED` | Set false to leave off-list foods unrated instead of asking the LLM. Default `true`. |
+| `SCAN_CACHE_ENABLED` | Reuse a recent identical scan's results without re-running the LLM. Default `true`. |
+| `SCAN_CACHE_MAX_AGE_HOURS` | How long a cached result stays reusable. Default `720` (30 days). |
 | `LLM_TEMPERATURE` / `LLM_TIMEOUT` | Call tuning. Default `0.0` / `120` seconds. |
 | `MAX_UPLOAD_BYTES` | Max photo upload size in bytes. Default `20971520` (20 MB). |
 | `SCAN_RATE_LIMIT_PER_MINUTE` | Per-IP cap on scan endpoints. Default `6`. |

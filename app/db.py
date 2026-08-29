@@ -172,6 +172,13 @@ async def _migrate(conn: aiosqlite.Connection) -> None:
     if "query_text" not in cols:
         await conn.execute("ALTER TABLE scans ADD COLUMN query_text TEXT")
         logger.info("Migration: added scans.query_text column")
+    if "input_hash" not in cols:
+        await conn.execute("ALTER TABLE scans ADD COLUMN input_hash TEXT")
+        logger.info("Migration: added scans.input_hash column")
+    # Safe for both fresh (column from schema.sql) and migrated databases.
+    await conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_scans_input_hash ON scans (input_hash)"
+    )
 
 
 async def _seed_foods(conn: aiosqlite.Connection) -> None:
@@ -235,3 +242,63 @@ async def get_scan(conn: aiosqlite.Connection, scan_id: int) -> dict | None:
     scan["detected_items"] = json.loads(scan.get("detected_items") or "[]")
     scan["matched_foods"] = json.loads(scan.get("matched_foods") or "[]")
     return scan
+
+
+async def find_cached_scan(
+    conn: aiosqlite.Connection, input_hash: str, *, max_age_hours: int
+) -> dict | None:
+    """Most recent successful scan with this input hash, still inside the cache
+    window. Returns the decoded scan dict (same shape as get_scan) or None."""
+    if not input_hash:
+        return None
+    rows = await conn.execute_fetchall(
+        """SELECT * FROM scans
+           WHERE input_hash = ? AND verdict IS NOT NULL AND verdict != 'error'
+             AND created_at >= strftime('%Y-%m-%dT%H:%M:%SZ', 'now', ?)
+           ORDER BY id DESC LIMIT 1""",
+        (input_hash, f"-{int(max_age_hours)} hours"),
+    )
+    if not rows:
+        return None
+    scan = dict(rows[0])
+    scan["detected_items"] = json.loads(scan.get("detected_items") or "[]")
+    scan["matched_foods"] = json.loads(scan.get("matched_foods") or "[]")
+    return scan
+
+
+async def get_learned_foods(conn: aiosqlite.Connection) -> list[dict]:
+    """Feedback-trained foods that still have net-positive support, shaped like
+    `foods` rows so matcher.match_detected consumes them unchanged."""
+    rows = await conn.execute_fetchall(
+        "SELECT name, category, reason FROM learned_foods WHERE upvotes > downvotes"
+    )
+    return [
+        {"name": r["name"], "category": r["category"], "aliases": "", "notes": r["reason"]}
+        for r in rows
+    ]
+
+
+async def record_learned_food(
+    conn: aiosqlite.Connection, *, name: str, category: str, reason: str, delta: int
+) -> None:
+    """Register a 👍 (delta=+1) or 👎 (delta=-1) for an LLM-estimated food.
+    Creates the row on first upvote; deletes it once downvotes clearly win."""
+    name = (name or "").strip()
+    if not name or category not in ("avoid", "limit", "ok"):
+        return
+    up, down = (1, 0) if delta > 0 else (0, 1)
+    await conn.execute(
+        """INSERT INTO learned_foods (name, category, reason, upvotes, downvotes)
+           VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT(name) DO UPDATE SET
+             upvotes = upvotes + ?,
+             downvotes = downvotes + ?,
+             reason = CASE WHEN excluded.reason != '' THEN excluded.reason ELSE learned_foods.reason END,
+             updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')""",
+        (name, category, reason or "", up, down, up, down),
+    )
+    await conn.execute(
+        "DELETE FROM learned_foods WHERE name = ? AND downvotes >= upvotes + 2",
+        (name,),
+    )
+    await conn.commit()

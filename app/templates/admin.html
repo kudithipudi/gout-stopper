@@ -115,6 +115,60 @@
     </div>
   </div>
 
+  <!-- Learned from feedback -->
+  <div class="rounded-xl border border-slate-200 bg-white overflow-hidden">
+    <div class="px-5 py-4 border-b border-slate-100">
+      <h2 class="font-semibold text-slate-800">Learned from 👍 feedback ({{ learned|length }})</h2>
+      <p class="text-xs text-slate-400 mt-0.5">Foods the AI estimated and users confirmed. Consulted before paying for a fresh LLM call. Promote the good ones onto the list above.</p>
+    </div>
+    {% if learned %}
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="text-left text-xs uppercase tracking-wide text-slate-400 border-b border-slate-100">
+            <th class="px-5 py-2 font-semibold">Name</th>
+            <th class="px-5 py-2 font-semibold">Category</th>
+            <th class="px-5 py-2 font-semibold">Votes</th>
+            <th class="hidden md:table-cell px-5 py-2 font-semibold">Reason</th>
+            <th class="px-5 py-2"></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          {% for l in learned %}
+          <tr class="hover:bg-slate-50">
+            <td class="px-5 py-2.5 font-medium text-slate-800">{{ l.name }}</td>
+            <td class="px-5 py-2.5">
+              <span class="inline-block rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase
+                {% if l.category == 'avoid' %}bg-rose-100 text-rose-800
+                {% elif l.category == 'limit' %}bg-amber-100 text-amber-800
+                {% else %}bg-emerald-100 text-emerald-800{% endif %}">{{ l.category }}</span>
+            </td>
+            <td class="px-5 py-2.5 text-slate-500 tabular-nums">
+              <span class="text-emerald-600">+{{ l.upvotes }}</span> / <span class="text-rose-600">-{{ l.downvotes }}</span>
+            </td>
+            <td class="hidden md:table-cell px-5 py-2.5 text-slate-500 max-w-xs truncate">{{ l.reason }}</td>
+            <td class="px-5 py-2.5 text-right whitespace-nowrap">
+              <form action="{{ prefix }}/admin/learned/{{ l.id }}/promote" method="post" class="inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                <button type="submit" class="text-xs font-medium text-indigo-600 hover:text-indigo-800 transition">Promote</button>
+              </form>
+              <span class="text-slate-300 mx-1">·</span>
+              <form action="{{ prefix }}/admin/learned/{{ l.id }}/delete" method="post" class="inline"
+                    onsubmit="return confirm('Dismiss {{ l.name|e }}?')">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                <button type="submit" class="text-xs font-medium text-rose-600 hover:text-rose-800 transition">Dismiss</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="px-5 py-4 text-sm text-slate-400">Nothing learned yet — it fills in as visitors 👍 results for foods that aren't on the list.</p>
+    {% endif %}
+  </div>
+
   <!-- Recent scans -->
   <div class="rounded-xl border border-slate-200 bg-white overflow-hidden">
     <div class="px-5 py-4 border-b border-slate-100">

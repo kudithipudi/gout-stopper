@@ -15,10 +15,19 @@ class Settings(BaseSettings):
     food_detect_model: str = "openai/gpt-4o-mini"
     food_identify_model: str = "openai/gpt-4o-mini"
     advice_model: str = "openai/gpt-4o-mini"
+    # Rates a food for gout risk when it isn't on the admin list or the
+    # feedback-trained learned list. Off -> unmatched foods stay "unknown".
+    gout_classify_model: str = "openai/gpt-4o-mini"
+    gout_classify_enabled: bool = True
     llm_temperature: float = 0.0
     llm_timeout: int = 120
     max_upload_bytes: int = 20 * 1024 * 1024
     scan_rate_limit_per_minute: int = 6
+    # Reuse a recent identical scan's results instead of re-running the LLM
+    # pipeline. The model-id triplet is part of the cache key, so changing a
+    # model busts it. Set 0/false to always analyze fresh.
+    scan_cache_enabled: bool = True
+    scan_cache_max_age_hours: int = 720
     # Per-IP cap on POST /admin/login. Low enough to make online brute force
     # of the single shared admin password pointless, high enough that a human
     # mistyping their password a few times isn't locked out.

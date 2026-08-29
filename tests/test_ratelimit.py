@@ -34,6 +34,7 @@ async def limited_client(tmp_path, monkeypatch):
     monkeypatch.setenv("SESSION_SECRET", "test-session-secret")
     monkeypatch.setenv("SCAN_RATE_LIMIT_PER_MINUTE", "2")
     monkeypatch.setenv("ADMIN_LOGIN_RATE_LIMIT_PER_MINUTE", "1000")
+    monkeypatch.setenv("SCAN_CACHE_ENABLED", "0")
     await init_db(str(db_path))
 
     from app.main import app
@@ -55,6 +56,7 @@ async def login_limited_client(tmp_path, monkeypatch):
     monkeypatch.setenv("SESSION_SECRET", "test-session-secret")
     monkeypatch.setenv("SCAN_RATE_LIMIT_PER_MINUTE", "1000")
     monkeypatch.setenv("ADMIN_LOGIN_RATE_LIMIT_PER_MINUTE", "3")
+    monkeypatch.setenv("SCAN_CACHE_ENABLED", "0")
     await init_db(str(db_path))
 
     from app.main import app

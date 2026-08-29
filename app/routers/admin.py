@@ -100,6 +100,12 @@ async def admin_page(request: Request, db=Depends(get_db)):
         return _redirect("/admin/login")
 
     foods = [dict(r) for r in await db.execute_fetchall("SELECT * FROM foods ORDER BY name")]
+    learned = [
+        dict(r)
+        for r in await db.execute_fetchall(
+            "SELECT * FROM learned_foods ORDER BY upvotes - downvotes DESC, updated_at DESC"
+        )
+    ]
     scans = [
         dict(r)
         for r in await db.execute_fetchall(
@@ -117,6 +123,7 @@ async def admin_page(request: Request, db=Depends(get_db)):
         "admin.html",
         {
             "foods": foods,
+            "learned": learned,
             "scans": scans,
             "counts": counts,
             "categories": _CATEGORIES,
@@ -159,5 +166,45 @@ async def delete_food(food_id: int, db=Depends(get_db)):
     if not existing:
         raise HTTPException(status_code=404, detail="Food not found")
     await db.execute("DELETE FROM foods WHERE id = ?", (food_id,))
+    await db.commit()
+    return _redirect("/admin")
+
+
+@router.post(
+    "/learned/{learned_id}/promote",
+    dependencies=[Depends(require_admin), Depends(csrf.require_csrf)],
+)
+async def promote_learned_food(learned_id: int, db=Depends(get_db)):
+    """Move a feedback-trained food onto the authoritative admin list."""
+    rows = await db.execute_fetchall(
+        "SELECT * FROM learned_foods WHERE id = ?", (learned_id,)
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="Learned food not found")
+    row = dict(rows[0])
+    dup = await db.execute_fetchall(
+        "SELECT id FROM foods WHERE name = ? COLLATE NOCASE", (row["name"],)
+    )
+    if not dup:
+        await db.execute(
+            "INSERT INTO foods (name, category, aliases, notes) VALUES (?, ?, ?, ?)",
+            (row["name"], row["category"], "", row["reason"] or "Learned from user feedback."),
+        )
+    await db.execute("DELETE FROM learned_foods WHERE id = ?", (learned_id,))
+    await db.commit()
+    return _redirect("/admin")
+
+
+@router.post(
+    "/learned/{learned_id}/delete",
+    dependencies=[Depends(require_admin), Depends(csrf.require_csrf)],
+)
+async def dismiss_learned_food(learned_id: int, db=Depends(get_db)):
+    existing = await db.execute_fetchall(
+        "SELECT id FROM learned_foods WHERE id = ?", (learned_id,)
+    )
+    if not existing:
+        raise HTTPException(status_code=404, detail="Learned food not found")
+    await db.execute("DELETE FROM learned_foods WHERE id = ?", (learned_id,))
     await db.commit()
     return _redirect("/admin")

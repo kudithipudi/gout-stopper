@@ -41,6 +41,20 @@ def test_unknown_stays_unknown():
     assert _match(["kimchi"])[0]["category"] == "unknown"
 
 
+def test_source_is_tagged():
+    matched = _match(["beer"])[0]
+    assert matched["source"] == "list"
+
+    unknown = _match(["kimchi"])[0]
+    assert unknown["source"] == "unknown"
+
+    learned = match_detected(
+        [{"name": "kimchi"}], [_food("kimchi", "limit")], source="learned"
+    )[0]
+    assert learned["category"] == "limit"
+    assert learned["source"] == "learned"
+
+
 def test_avoid_wins_over_ok():
     # "beer" appears in nothing else, but exercise priority explicitly with a
     # detected item that touches both lists.

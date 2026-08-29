@@ -158,6 +158,68 @@ async def test_scan_avoid_verdict(anon_client, fake_llm):
     assert "beer" in page.text.lower()
 
 
+async def test_scan_estimated_fallback(anon_client, fake_llm):
+    """A detected food that's on no list gets its verdict from the LLM
+    classifier, and the result page marks it as an estimate."""
+
+    async def analyze(raw, mime):
+        return {
+            "has_food": True,
+            "reason": "a plate",
+            "foods": [{"name": "kimchi", "confidence": 0.9, "portion": ""}],
+        }
+
+    async def classify(names):
+        assert names == ["kimchi"]
+        return {"kimchi": {"category": "limit", "reason": "moderate-purine fermented cabbage"}}
+
+    fake_llm(analyze=analyze, classify=classify)
+    resp = await _upload(anon_client)
+    sid = scan_id_from(resp)
+
+    page = await anon_client.get(f"/scan/{sid}")
+    assert "caution" in page.text  # verdict rolled up from the 'limit' estimate
+    assert "est." in page.text
+    assert "moderate-purine fermented cabbage" in page.text
+
+
+async def test_good_rating_trains_learned_foods(anon_client, fake_llm):
+    """👍 on an estimated result records the food, and the next identical scan
+    resolves from the learned list without calling the classifier again."""
+
+    async def analyze(raw, mime):
+        return {
+            "has_food": True,
+            "reason": "a bowl",
+            "foods": [{"name": "natto", "confidence": 0.9, "portion": ""}],
+        }
+
+    calls = {"n": 0}
+
+    async def classify(names):
+        calls["n"] += 1
+        return {"natto": {"category": "limit", "reason": "moderate-purine fermented soy"}}
+
+    fake_llm(analyze=analyze, classify=classify)
+
+    first = await _upload(anon_client)
+    sid = scan_id_from(first)
+    assert calls["n"] == 1
+
+    rated = await anon_client.post(
+        f"/scan/{sid}/rate", data={"rating": "good"}, follow_redirects=False
+    )
+    assert rated.status_code == 303
+
+    second = await _upload(anon_client)
+    sid2 = scan_id_from(second)
+    assert calls["n"] == 1, "learned list should have short-circuited the classifier"
+
+    page = await anon_client.get(f"/scan/{sid2}")
+    assert "limit" in page.text
+    assert "learned" in page.text
+
+
 async def test_scan_llm_down(anon_client, fake_llm):
     fake_llm(detect=lambda *a: None)
     resp = await _upload(anon_client)
@@ -253,6 +315,30 @@ async def test_text_scan_nothing_identified(anon_client, fake_llm):
     assert "No food found" in page.text
 
 
+async def test_scan_cache_hit_skips_llm(anon_client, fake_llm, monkeypatch):
+    monkeypatch.setenv("SCAN_CACHE_ENABLED", "1")
+    calls = {"n": 0}
+
+    async def identify_text(text):
+        calls["n"] += 1
+        return [{"name": "beer", "confidence": 0.98}]
+
+    fake_llm(identify_text=identify_text, advice=lambda *a: ("Skip the beer.", "avoid"))
+
+    first = await _text_scan(anon_client, food="a cold beer")
+    sid1 = scan_id_from(first)
+    assert calls["n"] == 1
+
+    second = await _text_scan(anon_client, food="a cold beer")
+    sid2 = scan_id_from(second)
+    assert sid2 != sid1, "cache hit still writes its own scan row"
+    assert calls["n"] == 1, "identical scan must not re-run the LLM"
+
+    page = await anon_client.get(f"/scan/{sid2}")
+    assert "avoid" in page.text
+    assert "beer" in page.text.lower()
+
+
 async def test_text_scan_llm_down(anon_client, fake_llm):
     fake_llm(identify_text=lambda text: None)
     resp = await _text_scan(anon_client)
@@ -346,6 +432,46 @@ async def test_admin_add_and_delete_food(client):
     )
     assert dele.status_code == 303
     assert "caviar" not in (await client.get("/admin")).text
+
+
+async def test_admin_promote_and_dismiss_learned_food(client, fake_llm):
+    # Produce a learned entry the honest way: an estimated scan, then a 👍.
+    async def identify_text(text):
+        return [{"name": "escargot", "confidence": 0.9}]
+
+    async def classify(names):
+        return {"escargot": {"category": "avoid", "reason": "high-purine shellfish-like"}}
+
+    fake_llm(identify_text=identify_text, classify=classify)
+    sid = scan_id_from(await _text_scan(client, food="escargot"))
+    await client.post(f"/scan/{sid}/rate", data={"rating": "good"}, follow_redirects=False)
+
+    import re
+
+    html = (await client.get("/admin")).text
+    assert "escargot" in html
+    match = re.search(r"escargot</td>.*?learned/(\d+)/promote", html, re.DOTALL)
+    assert match, "expected a promote action for the learned row"
+    lid = int(match.group(1))
+
+    token = await admin_csrf(client)
+    promoted = await client.post(
+        f"/admin/learned/{lid}/promote", data={"csrf_token": token}, follow_redirects=False
+    )
+    assert promoted.status_code == 303
+    after = (await client.get("/admin")).text
+    assert "escargot" in after  # now on the authoritative Food list
+    assert f"learned/{lid}/promote" not in after  # gone from the learned table
+
+    # Promoting again (row already consumed) 404s.
+    assert (
+        await client.post(f"/admin/learned/{lid}/promote", data={"csrf_token": token})
+    ).status_code == 404
+
+
+async def test_admin_learned_routes_need_csrf(client):
+    resp = await client.post("/admin/learned/1/promote", follow_redirects=False)
+    assert resp.status_code == 403
 
 
 async def test_admin_delete_missing(client):

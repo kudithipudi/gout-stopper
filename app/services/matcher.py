@@ -32,11 +32,15 @@ def _food_variants(food: dict) -> set[str]:
     return {normalize(v) for v in variants if v}
 
 
-def match_detected(detected_items: list[dict], foods: list[dict]) -> list[dict]:
+def match_detected(
+    detected_items: list[dict], foods: list[dict], *, source: str = "list"
+) -> list[dict]:
     """For each detected item, find the best food match (highest-priority
     category wins when several list entries match). 'unknown' when nothing
     matches. Returns one dict per detected item:
-    {"item": original name, "category": ..., "matches": [matched food names]}
+    {"item": original name, "category": ..., "matches": [...], "source": ...}
+    `source` labels where a matched category came from ("list", "learned",
+    "estimated"); unmatched rows are always tagged "unknown".
     """
     rows = []
     for item in detected_items:
@@ -56,12 +60,14 @@ def match_detected(detected_items: list[dict], foods: list[dict]) -> list[dict]:
                 elif _token_overlap(normalized, variant):
                     best = _promote(best, (cat_pri, food["category"], food["name"]))
 
+        matched = best[1] != "unknown"
         rows.append(
             {
                 "item": name,
                 "confidence": round(float(item.get("confidence") or 0.5), 2),
                 "category": best[1],
                 "matches": best[2],
+                "source": source if matched else "unknown",
             }
         )
     return rows

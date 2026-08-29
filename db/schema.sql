@@ -15,6 +15,24 @@ CREATE TABLE IF NOT EXISTS foods (
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_foods_name ON foods (name COLLATE NOCASE);
 
+-- Foods learned from user 👍 feedback on LLM-estimated results. Advisory only:
+-- consulted after the admin `foods` list but before paying for an LLM call, so
+-- repeat scans of the same off-list food get faster and more consistent. The
+-- admin can promote a row into `foods` or dismiss it (see app/routers/admin.py).
+CREATE TABLE IF NOT EXISTS learned_foods (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,                        -- normalized (matcher.normalize)
+    category TEXT NOT NULL
+        CHECK (category IN ('avoid', 'limit', 'ok')),
+    reason TEXT NOT NULL DEFAULT '',
+    upvotes INTEGER NOT NULL DEFAULT 0,
+    downvotes INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_learned_foods_name ON learned_foods (name);
+
 -- Sliding-window log backing per-IP rate limiting (see
 -- app/db.py:check_and_record_rate_limit). One row per hit, not fixed buckets.
 CREATE TABLE IF NOT EXISTS rate_limit_hits (
@@ -33,10 +51,15 @@ CREATE TABLE IF NOT EXISTS scans (
     image_path TEXT,
     -- User-typed food description (text scans). NULL for photo scans.
     query_text TEXT,
+    -- sha256 of (model triplet + normalized text | raw image bytes). Lets an
+    -- identical repeat scan reuse a recent result without re-running the LLM.
+    input_hash TEXT,
     has_food INTEGER,
-    -- JSON list: [{"name": "...", "confidence": 0.95}]
+    -- JSON list: [{"name": "...", "confidence": 0.95, "portion": "a pint"}]
     detected_items TEXT NOT NULL DEFAULT '[]',
-    -- JSON list: [{"item": "...", "category": "avoid"|"limit"|"ok"|"unknown", "matches": [...]}]
+    -- JSON list: [{"item": "...", "category": "avoid"|"limit"|"ok"|"unknown",
+    --             "matches": [...], "source": "list"|"learned"|"estimated"|"unknown",
+    --             "reason": "..."  (estimated only)}]
     matched_foods TEXT NOT NULL DEFAULT '[]',
     advice TEXT NOT NULL DEFAULT '',
     -- 'no_food' | 'safe' | 'caution' | 'avoid' | 'error'
@@ -49,3 +72,7 @@ CREATE TABLE IF NOT EXISTS scans (
     rating TEXT,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
+
+-- NOTE: idx_scans_input_hash is created in app/db.py:_migrate(), not here —
+-- executescript() runs before the additive ALTER that adds input_hash to
+-- databases created before the column existed.
