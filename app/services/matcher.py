@@ -5,7 +5,6 @@ gout list. Pure string logic — no LLM involved, so it is cheap and predictable
 import re
 
 _STRIP = re.compile(r"[^a-z0-9 ]+")
-_WORD = re.compile(r"[a-z0-9]+")
 
 _CATEGORY_PRIORITY = {"avoid": 3, "limit": 2, "ok": 1, "unknown": 0}
 
@@ -17,10 +16,6 @@ def normalize(name: str) -> str:
     if s.endswith("s") and len(s) > 3:
         s = s[:-1]
     return s
-
-
-def _tokens(s: str) -> set[str]:
-    return set(_WORD.findall(s))
 
 
 def _food_variants(food: dict) -> set[str]:
@@ -52,12 +47,10 @@ def match_detected(
 
         for food in foods:
             for variant in _food_variants(food):
-                cat_pri = _CATEGORY_PRIORITY.get(food["category"], 0)
-                if normalized == variant:
-                    best = _promote(best, (cat_pri, food["category"], food["name"]))
-                elif _substring(normalized, variant):
-                    best = _promote(best, (cat_pri, food["category"], food["name"]))
-                elif _token_overlap(normalized, variant):
+                if len(variant) < 3:
+                    continue
+                if normalized == variant or _phrase_contains(normalized, variant):
+                    cat_pri = _CATEGORY_PRIORITY.get(food["category"], 0)
                     best = _promote(best, (cat_pri, food["category"], food["name"]))
 
         matched = best[1] != "unknown"
@@ -81,19 +74,14 @@ def _promote(current: tuple[int, str, list[str]], cand: tuple[int, str, str]) ->
     return current
 
 
-def _substring(a: str, b: str) -> bool:
-    if len(a) < 3 or len(b) < 3:
-        return False
-    return a in b or b in a
-
-
-def _token_overlap(a: str, b: str) -> bool:
-    """True when the two names share a meaningful (>=4 char) word, e.g.
-    "grilled salmon" ~ "salmon". Short tokens are handled by _substring."""
-    ta, tb = _tokens(a), _tokens(b)
-    if not ta or not tb:
-        return False
-    return bool({t for t in (ta & tb) if len(t) >= 4})
+def _phrase_contains(haystack: str, needle: str) -> bool:
+    """True when `needle` appears in `haystack` as a whole word or phrase:
+    "salmon" in "grilled salmon" -> yes, but "wine" ~ "white rice" and
+    "chicken stock" ~ "grilled chicken thigh" -> no. A single word shared
+    between two different phrases is deliberately NOT a match — that's what
+    used to rate "white rice" as wine and "chicken thigh" as broth.
+    """
+    return re.search(rf"(?<![a-z0-9]){re.escape(needle)}(?![a-z0-9])", haystack) is not None
 
 
 def overall_verdict(matched: list[dict]) -> str:

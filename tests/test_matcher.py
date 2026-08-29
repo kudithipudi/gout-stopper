@@ -41,6 +41,25 @@ def test_unknown_stays_unknown():
     assert _match(["kimchi"])[0]["category"] == "unknown"
 
 
+def test_shared_single_word_is_not_a_match():
+    """Regression: "white rice" was rated as wine and "grilled chicken thigh"
+    as broth because they shared one common word with an alias."""
+    real = [
+        _food("wine", "limit", "red wine, white wine"),
+        _food("rice", "ok", "rice, white rice, brown rice"),
+        _food("broth", "avoid", "bone broth, beef broth, chicken stock"),
+        _food("chicken", "limit", "poultry, chicken breast"),
+    ]
+    by_name = {r["item"]: r for r in match_detected(
+        [{"name": "white rice"}, {"name": "grilled chicken thigh"}], real
+    )}
+    assert by_name["white rice"]["category"] == "ok"
+    assert by_name["grilled chicken thigh"]["category"] == "limit"
+
+    # ...but a real phrase match still lands:
+    assert match_detected([{"name": "chicken broth"}], real)[0]["category"] == "avoid"
+
+
 def test_source_is_tagged():
     matched = _match(["beer"])[0]
     assert matched["source"] == "list"
