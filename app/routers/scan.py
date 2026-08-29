@@ -32,6 +32,14 @@ templates.env.globals["prefix"] = get_settings().root_path
 
 _EXT_BY_MIME = {"image/png": ".png", "image/webp": ".webp", "image/gif": ".gif"}
 
+# Server-side safety net for the client-side resize in index.html: a desktop
+# upload, a JS-disabled browser, or a direct API call can still send a 12 MP /
+# multi-MB capture. A vision model gains nothing past ~1280px for identifying
+# food, so cap anything noticeably larger before we store it and base64 it to
+# the model.
+_STORE_MAX_DIM = 1600
+_STORE_TARGET_DIM = 1280
+
 
 def _redirect(path: str) -> RedirectResponse:
     return RedirectResponse(f"{get_settings().root_path}{path}", status_code=303)
@@ -88,6 +96,25 @@ async def _read_upload(request: Request) -> tuple[bytes, str, str]:
     return raw, fmt, (upload.content_type or "image/jpeg")
 
 
+def _downscale_for_model(raw: bytes) -> bytes | None:
+    """Return a JPEG capped at `_STORE_TARGET_DIM` on the long edge, or None if
+    the image is already within `_STORE_MAX_DIM` (or Pillow can't re-encode it).
+    """
+    try:
+        img = Image.open(io.BytesIO(raw))
+        img.load()
+    except (UnidentifiedImageError, OSError, ValueError):
+        return None
+    if max(img.size) <= _STORE_MAX_DIM:
+        return None
+    img = img.convert("RGB")
+    img.thumbnail((_STORE_TARGET_DIM, _STORE_TARGET_DIM))
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=85)
+    logger.info("Downscaled upload to %dx%d for the vision model", *img.size)
+    return buf.getvalue()
+
+
 @router.post("/scan", dependencies=[Depends(rate_limit_scan)])
 async def create_scan(request: Request, db=Depends(get_db)):
     raw, fmt, content_type = await _read_upload(request)
@@ -104,6 +131,10 @@ async def create_scan(request: Request, db=Depends(get_db)):
         converted.save(buf, format="JPEG", quality=90)
         raw = buf.getvalue()
         mime, ext = "image/jpeg", ".jpg"
+
+    downscaled = _downscale_for_model(raw)
+    if downscaled is not None:
+        raw, mime, ext = downscaled, "image/jpeg", ".jpg"
 
     uploads = Path(get_settings().uploads_dir)
     uploads.mkdir(parents=True, exist_ok=True)

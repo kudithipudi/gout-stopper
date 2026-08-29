@@ -96,6 +96,7 @@
           <span x-show="!previewLoading" class="text-sm">Preview isn't available for this photo, but we'll still check it.</span>
         </div>
       </div>
+      <p x-show="optimizedNote" x-text="optimizedNote" class="text-center text-xs text-slate-400"></p>
       <div class="flex flex-col sm:flex-row gap-3">
         <button type="submit"
                 class="flex-1 rounded-lg bg-indigo-600 px-5 py-3 text-white font-semibold text-base transition hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
@@ -183,6 +184,7 @@ function foodCheck() {
     previewLoading: false,
     serverRendering: false,
     serverRendered: false,
+    optimizedNote: '',
     submitting: false,
     _previewUrl: null,
     uploadFile: null,
@@ -205,13 +207,20 @@ function foodCheck() {
       // photo (or converting a HEIC) is not instant, and a frozen-looking
       // screen reads as "stuck".
       this.previewLoading = true;
+      this.optimizedNote = '';
       this.uploadFile = file;
 
-      const resized = await resizeImage(file, 1280, 0.85);
+      const resized = await resizeImage(file, UPLOAD_MAX_DIM, UPLOAD_JPEG_QUALITY);
       if (resized) {
-        this.uploadFile = resized;
-        this._previewUrl = URL.createObjectURL(resized);
+        this.uploadFile = resized.file;
+        this._previewUrl = URL.createObjectURL(resized.file);
         this.preview = this._previewUrl;
+        const kb = Math.max(1, Math.round(resized.file.size / 1024));
+        const origKb = Math.max(1, Math.round(file.size / 1024));
+        this.optimizedNote =
+          resized.file === file
+            ? `${resized.width}×${resized.height} · ${kb} KB`
+            : `Resized to ${resized.width}×${resized.height} · ${kb} KB (from ${origKb} KB)`;
         this.previewLoading = false;
         return;
       }
@@ -283,36 +292,60 @@ function recentChecks() {
   };
 }
 
-// Resolves to a resized File on success, or null if the browser couldn't
-// decode the source file at all (as opposed to a resize/encode hiccup,
-// where the original file is returned unchanged).
+// Long edge (px) we resize phone photos down to before uploading, and the JPEG
+// quality to encode at. Modern phones capture 12 MP+ / 3-8 MB; a vision model
+// gains nothing past ~1280px for identifying food, so this turns a multi-MB
+// capture into a ~150-300 KB JPEG — far faster to upload, and it sidesteps the
+// server-side HEIC->JPEG conversion entirely when the browser can decode it.
+const UPLOAD_MAX_DIM = 1280;
+const UPLOAD_JPEG_QUALITY = 0.82;
+
+// Resolves to { file, width, height } — the (possibly) downsized JPEG to
+// upload — or null if the browser couldn't decode the source at all, in which
+// case the caller falls back to a server-side conversion.
 async function resizeImage(file, maxDim, quality) {
   let source;
   try {
-    if (typeof createImageBitmap === 'function') {
-      source = await createImageBitmap(file);
-    } else {
-      source = await loadImageElement(file);
-    }
+    source = await createImageBitmap(file, { imageOrientation: 'from-image' });
   } catch (err) {
-    console.warn('Local image decode failed, will request a server-rendered preview:', err);
-    return null;
+    // Chrome/Firefox can't decode HEIC via createImageBitmap; an <img> element
+    // often can (iOS Safari renders HEIC natively). Try that before giving up.
+    try {
+      source = await loadImageElement(file);
+    } catch (err2) {
+      console.warn('Local image decode failed, will request a server-rendered preview:', err2);
+      return null;
+    }
   }
 
-  const scale = Math.min(1, maxDim / Math.max(source.width, source.height));
-  if (scale === 1) {
+  const sw = source.naturalWidth || source.width;
+  const sh = source.naturalHeight || source.height;
+  const scale = Math.min(1, maxDim / Math.max(sw, sh));
+  const alreadyJpeg = /^image\/jpe?g$/i.test(file.type || '');
+
+  // Nothing to gain: already a JPEG within the size cap.
+  if (scale === 1 && alreadyJpeg) {
     if (source.close) source.close();
-    return file;
+    return { file, width: sw, height: sh };
   }
+
+  const width = Math.round(sw * scale);
+  const height = Math.round(sh * scale);
   const canvas = document.createElement('canvas');
-  canvas.width = Math.round(source.width * scale);
-  canvas.height = Math.round(source.height * scale);
-  canvas.getContext('2d').drawImage(source, 0, 0, canvas.width, canvas.height);
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(source, 0, 0, width, height);
   if (source.close) source.close();
+
   const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
-  if (!blob) return file;
+  if (!blob || (alreadyJpeg && blob.size >= file.size)) {
+    return { file, width: sw, height: sh };
+  }
   const base = (file.name || 'photo').replace(/\.[^.]+$/, '');
-  return new File([blob], base + '.jpg', { type: 'image/jpeg' });
+  const out = new File([blob], base + '.jpg', { type: 'image/jpeg', lastModified: Date.now() });
+  return { file: out, width, height };
 }
 
 function loadImageElement(file) {

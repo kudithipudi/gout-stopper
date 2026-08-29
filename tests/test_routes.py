@@ -137,6 +137,38 @@ async def test_scan_rejects_non_image_bytes(anon_client):
     assert "look like a valid image" in resp.text
 
 
+def test_downscale_for_model_helper():
+    from app.routers.scan import _downscale_for_model
+
+    assert _downscale_for_model(FAKE_JPEG) is None  # 8x8, already tiny
+
+    buf = io.BytesIO()
+    Image.new("RGB", (3000, 2000), (10, 20, 30)).save(buf, format="JPEG")
+    out = _downscale_for_model(buf.getvalue())
+    assert out is not None
+    assert max(Image.open(io.BytesIO(out)).size) == 1280
+    assert len(out) < 3000 * 2000  # and much smaller on the wire
+
+
+async def test_large_photo_is_downscaled_server_side(anon_client, fake_llm):
+    from pathlib import Path
+
+    from app.config import get_settings
+
+    buf = io.BytesIO()
+    Image.new("RGB", (2400, 1800), (120, 60, 30)).save(buf, format="JPEG")
+    fake_llm(analyze=lambda raw, mime: {"has_food": False, "reason": "n/a", "foods": []})
+
+    resp = await anon_client.post(
+        "/scan", files={"image": ("big.jpg", buf.getvalue(), "image/jpeg")}, follow_redirects=False
+    )
+    assert resp.status_code == 303
+
+    stored = sorted(Path(get_settings().uploads_dir).glob("*"))
+    assert stored, "expected the scan to write a stored image"
+    assert max(Image.open(stored[-1]).size) <= 1280
+
+
 async def test_scan_no_food(anon_client, fake_llm):
     fake_llm(detect=lambda *a: {"has_food": False, "reason": "nothing edible"})
     resp = await _upload(anon_client)
