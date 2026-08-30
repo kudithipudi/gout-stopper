@@ -93,10 +93,10 @@ admin login + food CRUD.
 | `ROOT_PATH` | Public subpath, default `/gout-stopper`. |
 | `DB_PATH` | SQLite file, default `data/gout-stopper.db`. |
 | `UPLOADS_DIR` | Stored scan photos, default `data/uploads`. |
-| `FOOD_DETECT_MODEL` | Model for the photo `analyze` call (food gate + identification). Default `openai/gpt-4o-mini`. |
-| `FOOD_IDENTIFY_MODEL` | Model for parsing typed food descriptions. Default `openai/gpt-4o-mini`. |
-| `ADVICE_MODEL` | Model for the takeaway text. Default `openai/gpt-4o-mini`. |
-| `GOUT_CLASSIFY_MODEL` | Model that rates an off-list food for gout risk. Default `openai/gpt-4o-mini`. |
+| `FOOD_DETECT_MODEL` | Model for the photo `analyze` call (food gate + identification). Default `z-ai/glm-5.3-flash`. |
+| `FOOD_IDENTIFY_MODEL` | Model for parsing typed food descriptions. Default `z-ai/glm-5.3-flash`. |
+| `ADVICE_MODEL` | Model for the takeaway text. Default `z-ai/glm-5.3-flash`. |
+| `GOUT_CLASSIFY_MODEL` | Model that rates an off-list food for gout risk. Default `z-ai/glm-5.3-flash`. |
 | `GOUT_CLASSIFY_ENABLED` | Set false to leave off-list foods unrated instead of asking the LLM. Default `true`. |
 | `SCAN_CACHE_ENABLED` | Reuse a recent identical scan's results without re-running the LLM. Default `true`. |
 | `SCAN_CACHE_MAX_AGE_HOURS` | How long a cached result stays reusable. Default `720` (30 days). |
@@ -107,7 +107,7 @@ admin login + food CRUD.
 | `LOG_LEVEL` | App + gunicorn log verbosity (`info`, `debug`, ...). Default `info`. |
 
 Any OpenRouter model that accepts image content works (e.g.
-`google/gemini-2.0-flash`, `openai/gpt-4o`); per-purpose models can differ.
+`google/gemini-2.5-flash`, `openai/gpt-4o`); per-purpose models can differ.
 
 ## Logs
 
