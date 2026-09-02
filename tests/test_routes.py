@@ -1,6 +1,7 @@
 import io
 
 from PIL import Image
+from app import __version__
 
 from tests.conftest import (
     TEST_ADMIN_PASSWORD,
@@ -43,7 +44,9 @@ async def _text_scan(client, food="a cheeseburger with fries"):
 async def test_health_ok(anon_client):
     resp = await anon_client.get("/health")
     assert resp.status_code == 200
-    assert resp.json() == {"status": "ok"}
+    body = resp.json()
+    assert body["status"] == "ok"
+    assert body["version"] == __version__
 
 
 async def test_index_ok(anon_client):
