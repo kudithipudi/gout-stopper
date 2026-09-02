@@ -1,8 +1,17 @@
 # GoutStopper
 
+[![Latest release](https://img.shields.io/github/v/release/kudithipudi/gout-stopper?sort=semver&label=release)](https://github.com/kudithipudi/gout-stopper/releases)
+[![License: MIT](https://img.shields.io/github/license/kudithipudi/gout-stopper)](LICENSE)
+
 Check food for gout triggers — either snap a photo of it or just type in what
 you plan to eat. The app identifies the food and flags anything that tends to
 trigger gout attacks. Educational tool — not medical advice.
+
+![The home page — check a food by photo or by typing it in](docs/home.png)
+
+![A photo scan result — an at-a-glance verdict, each detected item badged Avoid / Limit / OK, and a short portion-aware takeaway](docs/result-photo.png)
+
+![A typed-food check — "grilled salmon, white rice and a beer" — flagging the beer as an avoid-list trigger](docs/result-text.png)
 
 ## What it is
 
@@ -36,6 +45,8 @@ trigger gout attacks. Educational tool — not medical advice.
 - Installable PWA: web app manifest + service worker cache the shell (home,
   about, CSS/JS, icons) for offline access and add-to-home-screen support.
   Scans, admin, and uploads always go straight to the network.
+
+Running at `https://lab.kudithipudi.org/gout-stopper/`.
 
 ## Stack
 
@@ -126,6 +137,27 @@ Rotation is handled by the host-level `/etc/logrotate.d/lab-apps` policy — no
 per-app rotation. Change verbosity with `LOG_LEVEL` in `.env` and restart the
 service; a crash before gunicorn opens its log files still surfaces in journald
 (`journalctl -u gout-stopper`).
+
+## Making it your own
+
+Everything the app needs to run is config (`.env`) or seeded data — but a few
+things are hard-coded to this deployment. If you fork it, change:
+
+- **Lab branding in `app/templates/base.html`** — the header link and the
+  "Part of the Kudithipudi AI Lab" footer line both point at
+  `https://lab.kudithipudi.org/`. Repoint or delete them.
+- **`gunicorn.conf.py`** — `bind` and `chdir` are absolute
+  `/var/www/gout-stopper` paths for the systemd + nginx setup described under
+  [Deploy](#deploy). Adjust for your own path / socket, or run under uvicorn.
+- **`ROOT_PATH`** — defaults to `/gout-stopper` (in `app/config.py` and
+  `.env.example`). Set it to `""` if you serve the app at a domain root, or to
+  your own subpath.
+- **The `lab.kudithipudi.org` / `lab-apps` references** in this README's
+  Deploy and Logs sections are examples from this host — substitute your own.
+
+The gout food list (`app/db.py:DEFAULT_FOODS`) is seeded on first run and then
+fully editable from the admin UI, so there's nothing installation-specific
+there — but you're welcome to tune the baseline before first launch.
 
 ## Versioning & license
 
