@@ -54,3 +54,6 @@ GEMINI.md
 .serena/
 .continue/
 .codeium/
+
+# uxcheck output (screenshots + report), regenerable.
+uxcheck-report/

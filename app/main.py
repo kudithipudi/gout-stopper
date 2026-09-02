@@ -8,9 +8,11 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
+from app import __version__
 from app.config import get_settings
 from app.db import init_db
 from app.routers import admin, pages, scan
+from app.services import llm
 
 settings = get_settings()
 # App logs inherit gunicorn's errorlog stream (app/logs/app.log) — see §7.
@@ -27,6 +29,7 @@ async def lifespan(app: FastAPI):
     Path(get_settings().uploads_dir).mkdir(parents=True, exist_ok=True)
     logger.info("Startup complete")
     yield
+    await llm.close_client()
 
 
 # Ensure the writable dirs exist before the /uploads mount, which requires a
@@ -91,7 +94,7 @@ app.include_router(admin.router)
 async def health():
     # Unauthenticated, no DB or external calls — a stable target for uptime
     # monitoring and deploy verification.
-    return {"status": "ok"}
+    return {"status": "ok", "version": __version__}
 
 
 @app.exception_handler(HTTPException)

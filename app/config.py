@@ -12,12 +12,12 @@ class Settings(BaseSettings):
     session_secret: str = ""
 
     # One model per LLM purpose (§ "different LLMs for different purposes").
-    food_detect_model: str = "z-ai/glm-5.3-flash"
-    food_identify_model: str = "z-ai/glm-5.3-flash"
-    advice_model: str = "z-ai/glm-5.3-flash"
+    food_detect_model: str = "google/gemini-3.1-flash-lite"
+    food_identify_model: str = "google/gemini-3.1-flash-lite"
+    advice_model: str = "google/gemini-3.1-flash-lite"
     # Rates a food for gout risk when it isn't on the admin list or the
     # feedback-trained learned list. Off -> unmatched foods stay "unknown".
-    gout_classify_model: str = "z-ai/glm-5.3-flash"
+    gout_classify_model: str = "google/gemini-3.1-flash-lite"
     gout_classify_enabled: bool = True
     llm_temperature: float = 0.0
     llm_timeout: int = 120

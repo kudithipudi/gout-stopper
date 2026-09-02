@@ -14,6 +14,7 @@ import base64
 import json
 import logging
 import re
+import time
 from typing import Any
 
 import httpx
@@ -21,6 +22,27 @@ import httpx
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+_OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+
+# One pooled client for the worker's lifetime: a scan is up to three
+# back-to-back calls, and a fresh client per call paid a TLS handshake each time.
+_client: httpx.AsyncClient | None = None
+
+
+def _get_client() -> httpx.AsyncClient:
+    global _client
+    if _client is None or _client.is_closed:
+        _client = httpx.AsyncClient(timeout=get_settings().llm_timeout)
+    return _client
+
+
+async def close_client() -> None:
+    global _client
+    if _client is not None and not _client.is_closed:
+        await _client.aclose()
+    _client = None
+
 
 _ANALYZE_SYSTEM = """You look at photographs of food. Do two things in one pass:
 
@@ -94,7 +116,7 @@ def _parse_json(content: str) -> Any:
         return None
 
 
-async def _chat_json(system: str, user_parts: list[dict], model: str) -> Any:
+async def _chat_json(system: str, user_parts: list[dict], model: str, *, purpose: str = "chat") -> Any:
     settings = get_settings()
     if not settings.openrouter_api_key:
         logger.warning("No OPENROUTER_API_KEY set; skipping LLM call")
@@ -108,21 +130,32 @@ async def _chat_json(system: str, user_parts: list[dict], model: str) -> Any:
         ],
         "response_format": {"type": "json_object"},
     }
+    started = time.perf_counter()
     try:
-        async with httpx.AsyncClient(timeout=settings.llm_timeout) as client:
-            resp = await client.post(
-                "https://openrouter.ai/api/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {settings.openrouter_api_key}",
-                    "Content-Type": "application/json",
-                },
-                json=payload,
-            )
-            resp.raise_for_status()
+        resp = await _get_client().post(
+            _OPENROUTER_URL,
+            headers={
+                "Authorization": f"Bearer {settings.openrouter_api_key}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+        )
+        resp.raise_for_status()
     except (httpx.HTTPStatusError, httpx.TransportError, httpx.TimeoutException) as exc:
-        logger.error("OpenRouter request failed (%s): %s", model, exc)
+        logger.error(
+            "OpenRouter request failed (%s %s, %.1fs): %s",
+            purpose, model, time.perf_counter() - started, exc,
+        )
         return None
     data = resp.json()
+    usage = data.get("usage") or {}
+    reasoning = (usage.get("completion_tokens_details") or {}).get("reasoning_tokens")
+    logger.info(
+        "LLM %s %s %.1fs in=%s out=%s%s",
+        purpose, model, time.perf_counter() - started,
+        usage.get("prompt_tokens", "?"), usage.get("completion_tokens", "?"),
+        f" reasoning={reasoning}" if reasoning else "",
+    )
     try:
         content = data["choices"][0]["message"]["content"]
     except (KeyError, IndexError):
@@ -158,7 +191,7 @@ async def analyze_photo(raw: bytes, mime: str) -> dict | None:
         {"type": "text", "text": "Analyze this photo: is there food, and what food?"},
         {"type": "image_url", "image_url": {"url": _image_b64(raw, mime)}},
     ]
-    result = await _chat_json(_ANALYZE_SYSTEM, parts, get_settings().food_detect_model)
+    result = await _chat_json(_ANALYZE_SYSTEM, parts, get_settings().food_detect_model, purpose="analyze")
     if not isinstance(result, dict) or "has_food" not in result:
         return None
     return {
@@ -181,7 +214,7 @@ async def identify_foods_from_text(text: str) -> list[dict] | None:
             ),
         }
     ]
-    result = await _chat_json(_IDENTIFY_SYSTEM, parts, get_settings().food_identify_model)
+    result = await _chat_json(_IDENTIFY_SYSTEM, parts, get_settings().food_identify_model, purpose="identify")
     if result is None:
         return None
     if isinstance(result, dict):
@@ -201,7 +234,7 @@ async def classify_gout_risk(names: list[str]) -> dict[str, dict]:
         return {}
     user = "Rate these foods for gout risk:\n" + "\n".join(f"- {n}" for n in names)
     result = await _chat_json(
-        _CLASSIFY_SYSTEM, [{"type": "text", "text": user}], settings.gout_classify_model
+        _CLASSIFY_SYSTEM, [{"type": "text", "text": user}], settings.gout_classify_model, purpose="classify"
     )
     if not isinstance(result, dict) or not isinstance(result.get("ratings"), list):
         return {}
@@ -234,7 +267,9 @@ async def generate_advice(detected: list[dict], matched: list[dict]) -> tuple[st
         + ("\n".join(lines) if lines else "(none identified)")
         + "\n\nWrite a short, practical takeaway for a person prone to gout."
     )
-    result = await _chat_json(_ADVICE_SYSTEM, [{"type": "text", "text": user}], settings.advice_model)
+    result = await _chat_json(
+        _ADVICE_SYSTEM, [{"type": "text", "text": user}], settings.advice_model, purpose="advice"
+    )
     if isinstance(result, dict):
         return str(result.get("advice", "")), str(result.get("overall", "safe"))
     return "", "safe"

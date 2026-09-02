@@ -9,6 +9,9 @@ chdir = "/var/www/gout-stopper"
 # resolve relative to chdir above.
 accesslog = "app/logs/access.log"
 errorlog = "app/logs/app.log"
+# The app logs via logging.basicConfig -> stderr; without this, those lines
+# (incl. the per-call "LLM ..." timing) land in journald instead of app.log.
+capture_output = True
 # Identical across apps so one tailing script sees the same columns everywhere:
 # timestamp, client IP, request line, status, response bytes, duration.
 access_log_format = '%(t)s %(h)s "%(r)s" %(s)s %(b)s %(L)ss'

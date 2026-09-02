@@ -93,10 +93,10 @@ admin login + food CRUD.
 | `ROOT_PATH` | Public subpath, default `/gout-stopper`. |
 | `DB_PATH` | SQLite file, default `data/gout-stopper.db`. |
 | `UPLOADS_DIR` | Stored scan photos, default `data/uploads`. |
-| `FOOD_DETECT_MODEL` | Model for the photo `analyze` call (food gate + identification). Default `z-ai/glm-5.3-flash`. |
-| `FOOD_IDENTIFY_MODEL` | Model for parsing typed food descriptions. Default `z-ai/glm-5.3-flash`. |
-| `ADVICE_MODEL` | Model for the takeaway text. Default `z-ai/glm-5.3-flash`. |
-| `GOUT_CLASSIFY_MODEL` | Model that rates an off-list food for gout risk. Default `z-ai/glm-5.3-flash`. |
+| `FOOD_DETECT_MODEL` | Model for the photo `analyze` call (food gate + identification). Default `google/gemini-3.1-flash-lite`. |
+| `FOOD_IDENTIFY_MODEL` | Model for parsing typed food descriptions. Default `google/gemini-3.1-flash-lite`. |
+| `ADVICE_MODEL` | Model for the takeaway text. Default `google/gemini-3.1-flash-lite`. |
+| `GOUT_CLASSIFY_MODEL` | Model that rates an off-list food for gout risk. Default `google/gemini-3.1-flash-lite`. |
 | `GOUT_CLASSIFY_ENABLED` | Set false to leave off-list foods unrated instead of asking the LLM. Default `true`. |
 | `SCAN_CACHE_ENABLED` | Reuse a recent identical scan's results without re-running the LLM. Default `true`. |
 | `SCAN_CACHE_MAX_AGE_HOURS` | How long a cached result stays reusable. Default `720` (30 days). |
@@ -108,6 +108,11 @@ admin login + food CRUD.
 
 Any OpenRouter model that accepts image content works (e.g.
 `google/gemini-2.5-flash`, `openai/gpt-4o`); per-purpose models can differ.
+Avoid models whose reasoning can't be switched off (e.g. `z-ai/glm-5.3-flash`,
+`google/gemini-3.5-flash-lite`): a photo scan is three sequential calls, and
+hidden thinking turns a ~3s scan into ~30s. Each call logs its model, latency
+and token counts at INFO (`LLM analyze google/... 1.4s in=1234 out=56`), so a
+slow model shows up in `app/logs/app.log`.
 
 ## Logs
 
@@ -121,3 +126,11 @@ Rotation is handled by the host-level `/etc/logrotate.d/lab-apps` policy — no
 per-app rotation. Change verbosity with `LOG_LEVEL` in `.env` and restart the
 service; a crash before gunicorn opens its log files still surfaces in journald
 (`journalctl -u gout-stopper`).
+
+## Versioning & license
+
+The app version lives in `app/__init__.py` (`__version__`) and is reported by
+`GET /health`. Releases are git tags (`v1.0.0`, …) with matching GitHub
+releases.
+
+MIT — see [LICENSE](LICENSE).
