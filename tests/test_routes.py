@@ -211,7 +211,7 @@ async def test_scan_no_food(anon_client, fake_llm):
 
     page = await anon_client.get(f"/scan/{sid}")
     assert page.status_code == 200
-    assert "No food found" in page.text
+    assert "No food to check" in page.text
 
 
 async def test_scan_avoid_verdict(anon_client, fake_llm):
@@ -255,8 +255,8 @@ async def test_scan_estimated_fallback(anon_client, fake_llm):
     sid = scan_id_from(resp)
 
     page = await anon_client.get(f"/scan/{sid}")
-    assert "caution" in page.text  # verdict rolled up from the 'limit' estimate
-    assert "est." in page.text
+    assert "Enjoy in moderation" in page.text  # verdict rolled up from the 'limit' estimate
+    assert "AI estimate" in page.text
     assert "moderate-purine fermented cabbage" in page.text
 
 
@@ -320,8 +320,8 @@ async def test_good_ratings_train_learned_foods_after_net_two(anon_client, fake_
     assert calls["n"] == 2, "net +2 should have short-circuited the classifier"
 
     page = await anon_client.get(f"/scan/{sid3}")
-    assert "limit" in page.text
-    assert "learned" in page.text
+    assert "Limit" in page.text
+    assert "other people's feedback" in page.text
 
 
 async def test_clean_safe_result_skips_the_advice_call(anon_client, fake_llm):
@@ -391,7 +391,7 @@ async def test_scan_llm_down(anon_client, fake_llm):
 
     page = await anon_client.get(f"/scan/{sid}")
     assert page.status_code == 200
-    assert "couldn't analyze" in page.text.lower()
+    assert "couldn't check" in page.text.lower()
 
 
 async def test_scan_rate(anon_client, fake_llm):
@@ -487,7 +487,7 @@ async def test_large_portion_escalates_the_result_verdict(anon_client, fake_llm)
     assert verdict == "avoid", "large portion of a limit food should roll up to avoid"
 
     page = await anon_client.get(f"/scan/{sid}")
-    assert "Some of this is on the “avoid” list" in page.text
+    assert "On the avoid list" in page.text
     assert "Enjoy in moderation" not in page.text
     assert "Larger portions were counted toward this verdict" in page.text
 
@@ -511,7 +511,7 @@ async def test_text_scan_nothing_identified(anon_client, fake_llm):
 
     page = await anon_client.get(f"/scan/{sid}")
     assert page.status_code == 200
-    assert "No food found" in page.text
+    assert "No food to check" in page.text
 
 
 async def test_scan_cache_hit_skips_llm(anon_client, fake_llm, monkeypatch):
@@ -546,7 +546,7 @@ async def test_text_scan_llm_down(anon_client, fake_llm):
 
     page = await anon_client.get(f"/scan/{sid}")
     assert page.status_code == 200
-    assert "couldn't analyze" in page.text.lower()
+    assert "couldn't check" in page.text.lower()
 
 
 # --- admin ----------------------------------------------------------------

@@ -19,7 +19,7 @@
             @keydown.home.prevent="switchTab('photo')"
             @keydown.end.prevent="switchTab('text')"
             class="rounded-lg px-4 py-2.5 text-[15px] font-semibold transition"
-            :class="mode === 'photo' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'">
+            :class="mode === 'photo' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-600 hover:text-slate-800'">
       📷 Take a photo
     </button>
     <button type="button" role="tab" id="tab-text" aria-controls="panel-text"
@@ -30,7 +30,7 @@
             @keydown.home.prevent="switchTab('photo')"
             @keydown.end.prevent="switchTab('text')"
             class="rounded-lg px-4 py-2.5 text-[15px] font-semibold transition"
-            :class="mode === 'text' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'">
+            :class="mode === 'text' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-600 hover:text-slate-800'">
       ⌨️ Type the food
     </button>
   </div>
@@ -134,16 +134,16 @@
   <div x-show="submitting" x-cloak role="status" aria-live="polite" class="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-white/90 backdrop-blur-sm">
     <span class="inline-block h-12 w-12 rounded-full border-4 border-indigo-600 border-t-transparent animate-spin motion-reduce:animate-none"></span>
     <p class="text-slate-700 font-semibold" x-text="serverRendered ? 'Converting and checking your photo…' : 'Checking your food…'"></p>
-    <p class="text-sm text-slate-400">This takes a few seconds.</p>
+    <p class="text-sm text-slate-500">This takes a few seconds.</p>
   </div>
 
   <!-- Your recent checks + personal triggers (client-side only) -->
   <div x-data="recentChecks()" x-cloak x-show="items.length || showTriggers" class="space-y-6">
     <section x-show="items.length" class="space-y-2">
       <div class="flex items-center justify-between">
-        <h2 class="text-sm font-semibold uppercase tracking-wide text-slate-500">Your recent checks</h2>
+        <h2 class="text-sm font-semibold text-slate-500">Your recent checks</h2>
         <button type="button" @click="clearAll()"
-                class="rounded px-2 py-1 text-xs font-medium text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition">Clear</button>
+                class="rounded px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition">Clear</button>
       </div>
       <ul class="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white overflow-hidden">
         <template x-for="item in items" :key="item.id">
@@ -157,7 +157,7 @@
                       'bg-slate-300': ['avoid','caution','safe'].indexOf(item.verdict) === -1
                     }"></span>
               <span class="flex-1 min-w-0 truncate text-sm text-slate-700" x-text="item.label" translate="no"></span>
-              <span class="text-xs text-slate-400 flex-shrink-0" x-text="when(item.ts)"></span>
+              <span class="text-xs text-slate-500 flex-shrink-0" x-text="when(item.ts)"></span>
               <span aria-hidden="true" class="text-slate-300 flex-shrink-0">&rsaquo;</span>
             </a>
           </li>
@@ -167,16 +167,16 @@
 
     <section x-show="showTriggers" class="rounded-xl border border-slate-200 bg-white p-4">
       <label for="triggers" class="block text-sm font-semibold text-slate-700">Foods that trigger <em>you</em></label>
-      <p class="text-xs text-slate-400 mt-0.5">Optional. Comma-separated — we'll flag these on your results. Kept only on this device.</p>
+      <p class="text-xs text-slate-500 mt-0.5">Optional. Comma-separated — we'll flag these on your results. Kept only on this device.</p>
       <input id="triggers" type="text" autocomplete="off" x-model="triggerText" @input.debounce.500ms="saveTriggers()"
              placeholder="e.g. beer, liver, anchovies"
              class="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
     </section>
   </div>
 
-  <div class="text-center text-xs text-slate-400">
+  <div class="text-center text-xs text-slate-500">
     <p>We identify the food — from the photo or your description — and compare it to a list of common gout triggers.</p>
-    <p class="mt-1">Educational tool only — <a href="{{ prefix }}/about" class="underline decoration-slate-300 underline-offset-2 hover:text-slate-600">read about gout &amp; diet</a>.</p>
+    <p class="mt-1">Educational tool only — <a href="{{ prefix }}/about" class="inline-block py-1 underline decoration-slate-300 underline-offset-2 hover:text-slate-700">read about gout &amp; diet</a>.</p>
   </div>
 </div>
 
