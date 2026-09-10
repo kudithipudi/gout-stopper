@@ -165,7 +165,15 @@ async def _run_pipeline(db, *, image_path, query_text, items: list[dict], input_
 
     _attach_portions(matched, items)
     verdict = matcher.overall_verdict(matched, items)
-    advice, _ = await llm.generate_advice(items, matched)
+
+    # A clean "safe" result with nothing AI-estimated needs no tailored
+    # takeaway — the green result banner already says "nothing flagged, keep
+    # hydrated". Skipping the call saves ~1s and a request on every all-clear.
+    estimated = any(m.get("source") == "estimated" for m in matched)
+    if verdict == "safe" and not estimated:
+        advice = ""
+    else:
+        advice, _ = await llm.generate_advice(items, matched)
 
     return await _store_scan(
         db,

@@ -324,6 +324,65 @@ async def test_good_ratings_train_learned_foods_after_net_two(anon_client, fake_
     assert "learned" in page.text
 
 
+async def test_clean_safe_result_skips_the_advice_call(anon_client, fake_llm):
+    """When nothing is flagged and nothing was AI-estimated, the green banner
+    is the whole takeaway — no advice call, no "Our take" box."""
+
+    async def identify_text(text):
+        return [{"name": "eggs", "confidence": 0.9}, {"name": "white rice", "confidence": 0.9}]
+
+    calls = {"n": 0}
+
+    async def advice(*a):
+        calls["n"] += 1
+        return "some advice", "safe"
+
+    fake_llm(identify_text=identify_text, advice=advice)
+    sid = scan_id_from(await _text_scan(anon_client, food="eggs and rice"))
+    assert calls["n"] == 0, "a clean safe result must not pay for an advice call"
+
+    page = await anon_client.get(f"/scan/{sid}")
+    assert "Looks gout-friendly" in page.text
+    assert "Our take" not in page.text
+
+
+async def test_safe_result_with_an_estimate_still_calls_advice(anon_client, fake_llm):
+    async def identify_text(text):
+        return [{"name": "dragonfruit", "confidence": 0.9}]
+
+    async def classify(names):
+        return {"dragonfruit": {"category": "ok", "reason": "low purine tropical fruit"}}
+
+    calls = {"n": 0}
+
+    async def advice(*a):
+        calls["n"] += 1
+        return "Dragonfruit is fine.", "safe"
+
+    fake_llm(identify_text=identify_text, classify=classify, advice=advice)
+    sid = scan_id_from(await _text_scan(anon_client, food="dragonfruit"))
+    assert calls["n"] == 1, "an AI-estimated item is worth an advice sentence"
+
+    page = await anon_client.get(f"/scan/{sid}")
+    assert "Dragonfruit is fine." in page.text
+
+
+async def test_caution_result_still_calls_advice(anon_client, fake_llm):
+    async def identify_text(text):
+        return [{"name": "salmon", "confidence": 0.9}]
+
+    calls = {"n": 0}
+
+    async def advice(*a):
+        calls["n"] += 1
+        return "Go easy on the salmon.", "caution"
+
+    fake_llm(identify_text=identify_text, advice=advice)
+    sid = scan_id_from(await _text_scan(anon_client, food="salmon"))
+    assert calls["n"] == 1
+    assert "Go easy on the salmon." in (await anon_client.get(f"/scan/{sid}")).text
+
+
 async def test_scan_llm_down(anon_client, fake_llm):
     fake_llm(detect=lambda *a: None)
     resp = await _upload(anon_client)
