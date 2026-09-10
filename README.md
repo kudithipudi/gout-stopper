@@ -22,14 +22,21 @@ trigger gout attacks. Educational tool — not medical advice.
   1. **analyze** (photo) — one vision call: is there food, and what is it?
      (text scans use an **identify** call instead.)
   2. **classify** — rate a food for gout risk when it's on no list (see below).
-  3. **advice** — a short, friendly, portion-aware takeaway for someone prone to gout.
+  3. **advice** — a short, friendly, portion-aware takeaway for someone prone to
+     gout. Skipped (with a canned line) when the verdict is a clean "safe".
 - Detected items are resolved in three cheap-to-expensive layers:
   1. **Admin list** — deterministic string match (no LLM) against an
      admin-managed list of gout foods in **Avoid / Limit / OK**.
   2. **Learned list** — foods that visitors have 👍-confirmed after an LLM
-     estimate; consulted before paying for another call.
+     estimate; consulted before paying for another call, but only once an
+     entry's net 👍 support reaches **+2** (over-generic names like "soup" or
+     "sauce" are never learned).
   3. **LLM estimate** — anything still unmatched is rated by the `classify`
-     model, and shown with an "est." marker.
+     model, and shown marked as an AI estimate.
+- **Portions count**: a stated serving size ("two pints", "a single glass")
+  nudges the overall verdict up or down — a large portion of a moderate-purine
+  food rolls up to "avoid"; a small portion of a trigger rolls one notch down
+  (never erasing the per-item flag).
 - **Repeat scans are instant**: an identical photo/description reuses the most
   recent result (within `SCAN_CACHE_MAX_AGE_HOURS`) with no LLM calls. The model
   line-up is part of the cache key, so changing a model busts it.
