@@ -60,6 +60,15 @@
   </div>
   {% endif %}
 
+  {% set large_portions = scan.matched_foods | selectattr('portion_size', 'equalto', 'large') | list %}
+  {% set small_portions = scan.matched_foods | selectattr('portion_size', 'equalto', 'small') | list %}
+  {% if large_portions or small_portions %}
+  <p class="text-xs text-slate-500 -mt-2">
+    {% if large_portions %}Larger portions were counted toward this verdict.{% endif %}
+    {% if small_portions %}{% if large_portions %} {% endif %}Smaller portions were counted in your favor.{% endif %}
+  </p>
+  {% endif %}
+
   <div class="space-y-2">
     <h3 class="font-semibold text-slate-700 text-sm uppercase tracking-wide">What we found</h3>
     <div class="flex flex-wrap gap-2" id="detected-chips">

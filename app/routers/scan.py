@@ -163,7 +163,8 @@ async def _run_pipeline(db, *, image_path, query_text, items: list[dict], input_
                     "reason": rated.get("reason", ""),
                 }
 
-    verdict = matcher.overall_verdict(matched)
+    _attach_portions(matched, items)
+    verdict = matcher.overall_verdict(matched, items)
     advice, _ = await llm.generate_advice(items, matched)
 
     return await _store_scan(
@@ -177,6 +178,22 @@ async def _run_pipeline(db, *, image_path, query_text, items: list[dict], input_
         verdict=verdict,
         advice=advice,
     )
+
+
+def _attach_portions(matched: list[dict], detected: list[dict]) -> None:
+    """Copy each detected item's stated portion onto its matched row, tagged
+    "large"/"small"/"" so the result page can explain a portion-adjusted
+    verdict. Mutates `matched` in place."""
+    portions = {
+        (d.get("name") or "").strip(): (d.get("portion") or "").strip()
+        for d in detected
+        if isinstance(d, dict)
+    }
+    for m in matched:
+        text = portions.get(m["item"], "")
+        if text:
+            m["portion"] = text
+            m["portion_size"] = matcher.portion_size(text) or ""
 
 
 async def _store_scan(

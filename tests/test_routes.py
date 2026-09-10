@@ -408,6 +408,42 @@ async def test_text_scan_verdict(anon_client, fake_llm):
     assert "beer" in page.text.lower()
 
 
+async def test_large_portion_escalates_the_result_verdict(anon_client, fake_llm):
+    """Salmon alone is 'caution'; a large stated portion pushes the scan to
+    'avoid', and the result page says the portion was factored in."""
+
+    async def identify_text(text):
+        return [{"name": "salmon", "confidence": 0.9, "portion": "several large fillets"}]
+
+    import sqlite3
+
+    from app.config import get_settings
+
+    fake_llm(identify_text=identify_text, advice=lambda *a: ("Go easy on the salmon.", "avoid"))
+    sid = scan_id_from(await _text_scan(anon_client, food="several large salmon fillets"))
+
+    con = sqlite3.connect(get_settings().db_path)
+    verdict = con.execute("SELECT verdict FROM scans WHERE id = ?", (sid,)).fetchone()[0]
+    con.close()
+    assert verdict == "avoid", "large portion of a limit food should roll up to avoid"
+
+    page = await anon_client.get(f"/scan/{sid}")
+    assert "Some of this is on the “avoid” list" in page.text
+    assert "Enjoy in moderation" not in page.text
+    assert "Larger portions were counted toward this verdict" in page.text
+
+
+async def test_normal_portion_leaves_the_verdict_alone(anon_client, fake_llm):
+    async def identify_text(text):
+        return [{"name": "salmon", "confidence": 0.9, "portion": "a fillet"}]
+
+    fake_llm(identify_text=identify_text)
+    sid = scan_id_from(await _text_scan(anon_client, food="a salmon fillet"))
+    page = await anon_client.get(f"/scan/{sid}")
+    assert "Enjoy in moderation" in page.text
+    assert "counted toward this verdict" not in page.text
+
+
 async def test_text_scan_nothing_identified(anon_client, fake_llm):
     fake_llm(identify_text=lambda text: [])
     resp = await _text_scan(anon_client, food="nothing much")

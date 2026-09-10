@@ -2,6 +2,7 @@ from app.services.matcher import (
     is_generic_food_name,
     match_detected,
     overall_verdict,
+    portion_size,
 )
 
 
@@ -114,3 +115,45 @@ def test_verdicts():
     assert overall_verdict(unknown) == "caution"
 
     assert overall_verdict([]) == "no_food"
+
+
+# --- portion-aware verdict ----------------------------------------------------
+
+
+def test_portion_size_classification():
+    assert portion_size("6 cans") == "large"
+    assert portion_size("several glasses") == "large"
+    assert portion_size("a pitcher") == "large"
+    assert portion_size("a dozen") == "large"
+    assert portion_size("a single glass") == "small"
+    assert portion_size("a small bowl") == "small"
+    assert portion_size("a sip") == "small"
+    assert portion_size("") is None
+    assert portion_size("a plate") is None
+
+
+def test_large_portion_of_a_limit_food_escalates_the_verdict():
+    matched = _match(["salmon"])  # salmon = limit -> "caution" on its own
+    assert overall_verdict(matched) == "caution"
+    detected = [{"name": "salmon", "portion": "a huge double portion"}]
+    assert overall_verdict(matched, detected) == "avoid"
+
+
+def test_small_portion_softens_an_avoid_verdict_to_caution():
+    matched = _match(["beer"])  # beer = avoid
+    assert overall_verdict(matched) == "avoid"
+    detected = [{"name": "beer", "portion": "a single small glass"}]
+    assert overall_verdict(matched, detected) == "caution"
+
+
+def test_large_portion_never_escalates_a_low_purine_food():
+    matched = _match(["eggs"])  # ok
+    detected = [{"name": "eggs", "portion": "a dozen"}]
+    assert overall_verdict(matched, detected) == "safe"
+
+
+def test_portion_does_not_change_the_per_item_category():
+    matched = _match(["beer"])
+    detected = [{"name": "beer", "portion": "a tiny sip"}]
+    overall_verdict(matched, detected)
+    assert matched[0]["category"] == "avoid"  # the chip still says avoid

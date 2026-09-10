@@ -112,11 +112,67 @@ def _phrase_contains(haystack: str, needle: str) -> bool:
     return re.search(rf"(?<![a-z0-9]){re.escape(needle)}(?![a-z0-9])", haystack) is not None
 
 
-def overall_verdict(matched: list[dict]) -> str:
-    """Roll per-item categories into a single scan verdict."""
+# Phrases in an LLM-supplied portion string that mean "noticeably more / less
+# than one normal serving". Only the roll-up verdict uses these — never the
+# per-item category shown on a chip.
+_LARGE_PORTION = re.compile(
+    r"\b(several|multiple|many|lots?|plenty|loads|pitchers?|carafes?|jugs?|"
+    r"large|x-?large|extra[- ]large|jumbo|giant|huge|oversized|double|triple|"
+    r"three|four|five|six|seven|eight|nine|ten|dozen)\b|"
+    r"(?<!\d)([3-9]|\d{2,})\s*(?:x\b|cans?\b|bottles?\b|glasses\b|pints?\b|"
+    r"servings?\b|slices?\b|pieces?\b|drinks?\b|beers?\b|plates?\b|bowls?\b|"
+    r"cups?\b|helpings?\b|portions?\b|scoops?\b|shots?\b)"
+)
+_SMALL_PORTION = re.compile(
+    r"\b(a sip|a bite|a taste|a nibble|small|half|mini|tiny|"
+    r"single|a single|one|a little|a bit)\b"
+)
+
+
+def portion_size(text: str) -> str | None:
+    """Classify a free-text portion ("6 cans", "a single glass", "a plate") as
+    "large", "small", or None when it's an ordinary / unstated serving. When a
+    string reads as both, "large" wins (the safer call for gout)."""
+    t = (text or "").strip().lower()
+    if not t:
+        return None
+    if _LARGE_PORTION.search(t):
+        return "large"
+    if _SMALL_PORTION.search(t):
+        return "small"
+    return None
+
+
+def _effective_category(category: str, size: str | None) -> str:
+    """The category a portion-adjusted item contributes to the roll-up. A large
+    serving of a moderate-purine food counts as high-risk; a small serving of a
+    trigger counts one notch lower — but never erases the flag entirely."""
+    if size == "large" and category == "limit":
+        return "avoid"
+    if size == "small":
+        if category == "avoid":
+            return "limit"
+        if category == "limit":
+            return "ok"
+    return category
+
+
+def overall_verdict(matched: list[dict], detected: list[dict] | None = None) -> str:
+    """Roll per-item categories into a single scan verdict. When `detected` is
+    given, each item's stated portion nudges its contribution up or down (see
+    `_effective_category`); the per-item categories in `matched` are untouched.
+    """
     if not matched:
         return "no_food"
-    cats = {m["category"] for m in matched}
+    sizes = {
+        (d.get("name") or "").strip(): portion_size(d.get("portion", ""))
+        for d in (detected or [])
+        if isinstance(d, dict)
+    }
+    cats = {
+        _effective_category(m["category"], sizes.get(m["item"]))
+        for m in matched
+    }
     if "avoid" in cats:
         return "avoid"
     if "limit" in cats:
