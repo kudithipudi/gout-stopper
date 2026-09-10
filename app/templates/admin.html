@@ -119,7 +119,7 @@
   <div class="rounded-xl border border-slate-200 bg-white overflow-hidden">
     <div class="px-5 py-4 border-b border-slate-100">
       <h2 class="font-semibold text-slate-800">Learned from 👍 feedback ({{ learned|length }})</h2>
-      <p class="text-xs text-slate-400 mt-0.5">Foods the AI estimated and users confirmed. Consulted before paying for a fresh LLM call. Promote the good ones onto the list above.</p>
+      <p class="text-xs text-slate-400 mt-0.5">Foods the AI estimated and users confirmed. An entry is consulted (before paying for a fresh LLM call) only once its net support reaches <span class="font-semibold">+2</span>. Promote the good ones onto the list above.</p>
     </div>
     {% if learned %}
     <div class="overflow-x-auto">
@@ -143,8 +143,13 @@
                 {% elif l.category == 'limit' %}bg-amber-100 text-amber-800
                 {% else %}bg-emerald-100 text-emerald-800{% endif %}">{{ l.category }}</span>
             </td>
-            <td class="px-5 py-2.5 text-slate-500 tabular-nums">
+            <td class="px-5 py-2.5 text-slate-500 tabular-nums whitespace-nowrap">
               <span class="text-emerald-600">+{{ l.upvotes }}</span> / <span class="text-rose-600">-{{ l.downvotes }}</span>
+              {% if l.upvotes - l.downvotes >= 2 %}
+              <span class="ml-1.5 inline-block rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-700" title="Net +2 — used to resolve matching scans">Active</span>
+              {% else %}
+              <span class="ml-1.5 inline-block rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-500" title="Needs net +2 before it's consulted">Pending</span>
+              {% endif %}
             </td>
             <td class="hidden md:table-cell px-5 py-2.5 text-slate-500 max-w-xs truncate">{{ l.reason }}</td>
             <td class="px-5 py-2.5 text-right whitespace-nowrap">

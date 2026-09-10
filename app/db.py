@@ -5,6 +5,7 @@ from pathlib import Path
 import aiosqlite
 
 from app.config import get_settings
+from app.services import matcher
 
 logger = logging.getLogger(__name__)
 
@@ -154,6 +155,7 @@ async def init_db(db_path: str | None = None) -> None:
         schema = _SCHEMA_PATH.read_text()
         await conn.executescript(schema)
         await _migrate(conn)
+        await _prune_generic_learned_foods(conn)
         await _seed_foods(conn)
         await conn.commit()
         logger.info("Database schema applied")
@@ -179,6 +181,19 @@ async def _migrate(conn: aiosqlite.Connection) -> None:
     await conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_scans_input_hash ON scans (input_hash)"
     )
+
+
+async def _prune_generic_learned_foods(conn: aiosqlite.Connection) -> None:
+    """Drop learned-list rows whose name is too broad to match on safely
+    (added before `matcher.is_generic_food_name` gated new ones). Idempotent —
+    a no-op once the table is clean."""
+    rows = await conn.execute_fetchall("SELECT id, name FROM learned_foods")
+    stale = [r["id"] for r in rows if matcher.is_generic_food_name(r["name"])]
+    if stale:
+        await conn.executemany(
+            "DELETE FROM learned_foods WHERE id = ?", [(i,) for i in stale]
+        )
+        logger.info("Pruned %d over-generic learned food(s)", len(stale))
 
 
 async def _seed_foods(conn: aiosqlite.Connection) -> None:
@@ -267,10 +282,12 @@ async def find_cached_scan(
 
 
 async def get_learned_foods(conn: aiosqlite.Connection) -> list[dict]:
-    """Feedback-trained foods that still have net-positive support, shaped like
-    `foods` rows so matcher.match_detected consumes them unchanged."""
+    """Feedback-trained foods with enough corroborating 👍 to be trusted (net
+    support ≥ 2), shaped like `foods` rows so matcher.match_detected consumes
+    them unchanged. A lone upvote is recorded but not yet consulted, so one
+    visitor's rating can't change what everyone else sees."""
     rows = await conn.execute_fetchall(
-        "SELECT name, category, reason FROM learned_foods WHERE upvotes > downvotes"
+        "SELECT name, category, reason FROM learned_foods WHERE upvotes - downvotes >= 2"
     )
     return [
         {"name": r["name"], "category": r["category"], "aliases": "", "notes": r["reason"]}
@@ -285,6 +302,11 @@ async def record_learned_food(
     Creates the row on first upvote; deletes it once downvotes clearly win."""
     name = (name or "").strip()
     if not name or category not in ("avoid", "limit", "ok"):
+        return
+    if matcher.is_generic_food_name(name):
+        # "soup", "dipping sauce", ... — too broad to learn: it would flag
+        # every unrelated dish containing the word.
+        logger.info("Not learning over-generic food name: %r", name)
         return
     up, down = (1, 0) if delta > 0 else (0, 1)
     await conn.execute(

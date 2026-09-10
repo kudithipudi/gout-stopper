@@ -8,6 +8,18 @@ _STRIP = re.compile(r"[^a-z0-9 ]+")
 
 _CATEGORY_PRIORITY = {"avoid": 3, "limit": 2, "ok": 1, "unknown": 0}
 
+# Words that name a whole category of dish rather than a specific food. A
+# learned-list entry this broad does more harm than good: "soup" learned as
+# "limit" would then flag tomato soup, miso soup, gazpacho — anything with the
+# word in it. `normalize()` has already stripped a trailing plural 's', so the
+# singular forms are what we check against.
+_GENERIC_FOOD_WORDS = {
+    "soup", "stew", "broth", "stock", "sauce", "dip", "dressing", "marinade",
+    "gravy", "condiment", "topping", "garnish", "seasoning", "spice", "herb",
+    "beverage", "drink", "appetizer", "entree", "dessert", "side",
+    "dish", "meal", "snack", "food", "platter", "combo", "special", "starter",
+}
+
 
 def normalize(name: str) -> str:
     """Lowercase, drop punctuation, collapse whitespace, strip a trailing 's'."""
@@ -16,6 +28,22 @@ def normalize(name: str) -> str:
     if s.endswith("s") and len(s) > 3:
         s = s[:-1]
     return s
+
+
+def is_generic_food_name(name: str) -> bool:
+    """True when `name` is too broad to safely learn or match on: a bare
+    category word ("soup", "sauce"), or a short phrase that ends in one
+    ("dipping sauce", "tomato soup"). A longer, more specific phrase
+    ("hot and sour soup") is fine."""
+    normalized = normalize(name)
+    if not normalized:
+        return True
+    words = normalized.split()
+    if normalized in _GENERIC_FOOD_WORDS:
+        return True
+    if len(words) <= 2 and words[-1] in _GENERIC_FOOD_WORDS:
+        return True
+    return False
 
 
 def _food_variants(food: dict) -> set[str]:

@@ -1,4 +1,8 @@
-from app.services.matcher import match_detected, overall_verdict
+from app.services.matcher import (
+    is_generic_food_name,
+    match_detected,
+    overall_verdict,
+)
 
 
 def _food(name, category, aliases=""):
@@ -80,6 +84,20 @@ def test_avoid_wins_over_ok():
     mixed = SAMPLE + [_food("malt", "ok", "beer malt")]
     result = match_detected([{"name": "beer"}], mixed)[0]
     assert result["category"] == "avoid"
+
+
+def test_generic_food_name_is_rejected():
+    # A bare generic word, or a short phrase that ends in one, is too broad to
+    # learn — "soup" would then flag every soup, "dipping sauce" every sauce.
+    for name in ["soup", "Soup", "sauce", "herbs", "spices", "dipping sauce",
+                 "iced beverage", "side dish", "tomato soup"]:
+        assert is_generic_food_name(name), name
+
+
+def test_specific_food_name_is_allowed():
+    for name in ["natto", "hot and sour soup", "escargot", "kimchi",
+                 "chicken tikka masala", "red pepper flakes"]:
+        assert not is_generic_food_name(name), name
 
 
 def test_verdicts():

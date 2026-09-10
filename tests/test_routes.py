@@ -229,9 +229,10 @@ async def test_scan_estimated_fallback(anon_client, fake_llm):
     assert "moderate-purine fermented cabbage" in page.text
 
 
-async def test_good_rating_trains_learned_foods(anon_client, fake_llm):
-    """👍 on an estimated result records the food, and the next identical scan
-    resolves from the learned list without calling the classifier again."""
+async def test_good_ratings_train_learned_foods_after_net_two(anon_client, fake_llm):
+    """👍 on an estimated result records the food; once its net support reaches
+    +2, the next identical scan resolves from the learned list without calling
+    the classifier again. A single 👍 is not enough."""
 
     async def analyze(raw, mime):
         return {
@@ -248,20 +249,24 @@ async def test_good_rating_trains_learned_foods(anon_client, fake_llm):
 
     fake_llm(analyze=analyze, classify=classify)
 
-    first = await _upload(anon_client)
-    sid = scan_id_from(first)
+    async def scan_and_upvote():
+        sid = scan_id_from(await _upload(anon_client))
+        rated = await anon_client.post(
+            f"/scan/{sid}/rate", data={"rating": "good"}, follow_redirects=False
+        )
+        assert rated.status_code == 303
+        return sid
+
+    await scan_and_upvote()
     assert calls["n"] == 1
 
-    rated = await anon_client.post(
-        f"/scan/{sid}/rate", data={"rating": "good"}, follow_redirects=False
-    )
-    assert rated.status_code == 303
+    await scan_and_upvote()
+    assert calls["n"] == 2, "one upvote must not short-circuit the classifier"
 
-    second = await _upload(anon_client)
-    sid2 = scan_id_from(second)
-    assert calls["n"] == 1, "learned list should have short-circuited the classifier"
+    sid3 = scan_id_from(await _upload(anon_client))
+    assert calls["n"] == 2, "net +2 should have short-circuited the classifier"
 
-    page = await anon_client.get(f"/scan/{sid2}")
+    page = await anon_client.get(f"/scan/{sid3}")
     assert "limit" in page.text
     assert "learned" in page.text
 
@@ -513,6 +518,32 @@ async def test_admin_promote_and_dismiss_learned_food(client, fake_llm):
     assert (
         await client.post(f"/admin/learned/{lid}/promote", data={"csrf_token": token})
     ).status_code == 404
+
+
+async def test_admin_learned_table_flags_which_rows_are_active(client, fake_llm):
+    """A learned row is only consulted once its net support hits +2. The admin
+    table has to make that distinction visible, or a lone-upvote row looks
+    like it's already in effect."""
+
+    async def identify_text(text):
+        return [{"name": "escargot", "confidence": 0.9}]
+
+    async def classify(names):
+        return {"escargot": {"category": "avoid", "reason": "high-purine"}}
+
+    fake_llm(identify_text=identify_text, classify=classify)
+
+    sid = scan_id_from(await _text_scan(client, food="escargot"))
+    await client.post(f"/scan/{sid}/rate", data={"rating": "good"}, follow_redirects=False)
+
+    html = (await client.get("/admin")).text
+    assert "Pending" in html and "escargot" in html
+
+    sid2 = scan_id_from(await _text_scan(client, food="escargot"))
+    await client.post(f"/scan/{sid2}/rate", data={"rating": "good"}, follow_redirects=False)
+
+    html = (await client.get("/admin")).text
+    assert "Active" in html
 
 
 async def test_admin_learned_routes_need_csrf(client):
