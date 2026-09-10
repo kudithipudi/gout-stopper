@@ -141,16 +141,47 @@ async def test_scan_rejects_non_image_bytes(anon_client):
 
 
 def test_downscale_for_model_helper():
-    from app.routers.scan import _downscale_for_model
+    from app.services.images import downscale_for_model
 
-    assert _downscale_for_model(FAKE_JPEG) is None  # 8x8, already tiny
+    assert downscale_for_model(FAKE_JPEG) is None  # 8x8, already tiny
 
     buf = io.BytesIO()
     Image.new("RGB", (3000, 2000), (10, 20, 30)).save(buf, format="JPEG")
-    out = _downscale_for_model(buf.getvalue())
+    out = downscale_for_model(buf.getvalue())
     assert out is not None
     assert max(Image.open(io.BytesIO(out)).size) == 1280
     assert len(out) < 3000 * 2000  # and much smaller on the wire
+
+
+def test_thumbnail_helper_reencodes_to_small_jpeg():
+    from app.services.images import thumbnail
+
+    buf = io.BytesIO()
+    Image.new("RGB", (2000, 1500), (10, 20, 30)).save(buf, format="PNG")
+    out = thumbnail(buf.getvalue())
+    img = Image.open(io.BytesIO(out))
+    assert img.format == "JPEG"
+    assert max(img.size) == 640
+
+
+async def test_preview_endpoint_returns_a_jpeg_thumbnail(anon_client):
+    buf = io.BytesIO()
+    Image.new("RGB", (1200, 900), (30, 120, 60)).save(buf, format="PNG")
+    resp = await anon_client.post(
+        "/scan/preview",
+        files={"image": ("plate.png", buf.getvalue(), "image/png")},
+    )
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "image/jpeg"
+    assert max(Image.open(io.BytesIO(resp.content)).size) == 640
+
+
+async def test_preview_endpoint_rejects_non_image(anon_client):
+    resp = await anon_client.post(
+        "/scan/preview",
+        files={"image": ("x.jpg", b"still not an image", "image/jpeg")},
+    )
+    assert resp.status_code == 400
 
 
 async def test_large_photo_is_downscaled_server_side(anon_client, fake_llm):
@@ -227,6 +258,28 @@ async def test_scan_estimated_fallback(anon_client, fake_llm):
     assert "caution" in page.text  # verdict rolled up from the 'limit' estimate
     assert "est." in page.text
     assert "moderate-purine fermented cabbage" in page.text
+
+
+async def test_scan_records_the_classify_model(anon_client, fake_llm):
+    """Every model that shaped a result is stored on the scan row — the cache
+    key already includes the classify model, so the audit trail must too."""
+    import sqlite3
+
+    from app.config import get_settings
+
+    async def analyze(raw, mime):
+        return {"has_food": True, "reason": "", "foods": [{"name": "kimchi", "confidence": 0.9, "portion": ""}]}
+
+    async def classify(names):
+        return {"kimchi": {"category": "limit", "reason": "fermented cabbage"}}
+
+    fake_llm(analyze=analyze, classify=classify)
+    sid = scan_id_from(await _upload(anon_client))
+
+    con = sqlite3.connect(get_settings().db_path)
+    row = con.execute("SELECT model_classify FROM scans WHERE id = ?", (sid,)).fetchone()
+    con.close()
+    assert row[0] == get_settings().gout_classify_model
 
 
 async def test_good_ratings_train_learned_foods_after_net_two(anon_client, fake_llm):

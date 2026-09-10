@@ -177,6 +177,9 @@ async def _migrate(conn: aiosqlite.Connection) -> None:
     if "input_hash" not in cols:
         await conn.execute("ALTER TABLE scans ADD COLUMN input_hash TEXT")
         logger.info("Migration: added scans.input_hash column")
+    if "model_classify" not in cols:
+        await conn.execute("ALTER TABLE scans ADD COLUMN model_classify TEXT")
+        logger.info("Migration: added scans.model_classify column")
     # Safe for both fresh (column from schema.sql) and migrated databases.
     await conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_scans_input_hash ON scans (input_hash)"

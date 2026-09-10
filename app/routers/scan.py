@@ -1,15 +1,11 @@
 import hashlib
-import io
 import json
-import logging
 import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
-from PIL import Image, UnidentifiedImageError
-import pillow_heif
 
 from app.config import get_settings
 from app.db import (
@@ -20,25 +16,12 @@ from app.db import (
     get_scan,
     record_learned_food,
 )
-from app.services import llm, matcher
+from app.services import images, llm, matcher
 from app.services import ratelimit
 
-pillow_heif.register_heif_opener()
-
-logger = logging.getLogger(__name__)
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 templates.env.globals["prefix"] = get_settings().root_path
-
-_EXT_BY_MIME = {"image/png": ".png", "image/webp": ".webp", "image/gif": ".gif"}
-
-# Server-side safety net for the client-side resize in index.html: a desktop
-# upload, a JS-disabled browser, or a direct API call can still send a 12 MP /
-# multi-MB capture. A vision model gains nothing past ~1280px for identifying
-# food, so cap anything noticeably larger before we store it and base64 it to
-# the model.
-_STORE_MAX_DIM = 1600
-_STORE_TARGET_DIM = 1280
 
 
 def _redirect(path: str) -> RedirectResponse:
@@ -72,69 +55,10 @@ async def rate_limit_scan(request: Request, db=Depends(get_db)) -> None:
         )
 
 
-async def _read_upload(request: Request) -> tuple[bytes, str, str]:
-    """Shared for /scan and /scan/preview: pull the uploaded image out of the
-    form, enforce size, and confirm it's a real image. Returns
-    (raw_bytes, pillow_format, content_type)."""
-    form = await request.form()
-    upload = form.get("image")
-    if upload is None or not getattr(upload, "filename", ""):
-        raise HTTPException(status_code=400, detail="No image selected")
-    raw = await upload.read()
-    if not raw:
-        raise HTTPException(status_code=400, detail="Empty image")
-    if len(raw) > get_settings().max_upload_bytes:
-        raise HTTPException(status_code=400, detail="Image is too large (max 20 MB)")
-    try:
-        fmt = Image.open(io.BytesIO(raw)).format or ""
-        Image.open(io.BytesIO(raw)).verify()
-    except (UnidentifiedImageError, OSError, ValueError):
-        raise HTTPException(
-            status_code=400,
-            detail="That doesn't look like a valid image — try a different photo.",
-        )
-    return raw, fmt, (upload.content_type or "image/jpeg")
-
-
-def _downscale_for_model(raw: bytes) -> bytes | None:
-    """Return a JPEG capped at `_STORE_TARGET_DIM` on the long edge, or None if
-    the image is already within `_STORE_MAX_DIM` (or Pillow can't re-encode it).
-    """
-    try:
-        img = Image.open(io.BytesIO(raw))
-        img.load()
-    except (UnidentifiedImageError, OSError, ValueError):
-        return None
-    if max(img.size) <= _STORE_MAX_DIM:
-        return None
-    img = img.convert("RGB")
-    img.thumbnail((_STORE_TARGET_DIM, _STORE_TARGET_DIM))
-    buf = io.BytesIO()
-    img.save(buf, format="JPEG", quality=85)
-    logger.info("Downscaled upload to %dx%d for the vision model", *img.size)
-    return buf.getvalue()
-
-
 @router.post("/scan", dependencies=[Depends(rate_limit_scan)])
 async def create_scan(request: Request, db=Depends(get_db)):
-    raw, fmt, content_type = await _read_upload(request)
-
-    mime = content_type.lower().split(";")[0].strip()
-    ext = _EXT_BY_MIME.get(mime, ".jpg")
-
-    if fmt == "HEIF":
-        # HEIC/HEIF photos (common on phones synced with iOS devices) aren't
-        # renderable in browsers or accepted by the vision LLM — convert to
-        # JPEG so both the stored file and the scan-detail preview work.
-        converted = Image.open(io.BytesIO(raw)).convert("RGB")
-        buf = io.BytesIO()
-        converted.save(buf, format="JPEG", quality=90)
-        raw = buf.getvalue()
-        mime, ext = "image/jpeg", ".jpg"
-
-    downscaled = _downscale_for_model(raw)
-    if downscaled is not None:
-        raw, mime, ext = downscaled, "image/jpeg", ".jpg"
+    raw, fmt, content_type = await images.read_upload(request)
+    raw, mime, ext = images.prepare_for_model(raw, fmt, content_type)
 
     uploads = Path(get_settings().uploads_dir)
     uploads.mkdir(parents=True, exist_ok=True)
@@ -150,28 +74,16 @@ async def create_scan(request: Request, db=Depends(get_db)):
 
     analysis = await llm.analyze_photo(raw, mime)
     if analysis is None:
-        scan_id = await _store_scan(
+        scan_id = await _store_error(
             db,
             image_path=rel_path,
             input_hash=input_hash,
-            has_food=None,
-            detected=[],
-            matched=[],
-            verdict="error",
-            error="Could not analyze the photo (LLM not reachable or not configured).",
+            message="Could not analyze the photo (LLM not reachable or not configured).",
         )
         return _redirect(f"/scan/{scan_id}")
 
     if not analysis["has_food"]:
-        scan_id = await _store_scan(
-            db,
-            image_path=rel_path,
-            input_hash=input_hash,
-            has_food=False,
-            detected=[],
-            matched=[],
-            verdict="no_food",
-        )
+        scan_id = await _store_no_food(db, image_path=rel_path, input_hash=input_hash)
         return _redirect(f"/scan/{scan_id}")
 
     scan_id = await _run_pipeline(
@@ -189,21 +101,8 @@ async def preview_scan_image(request: Request):
     """Returns a browser-safe JPEG thumbnail of an uploaded photo, for
     formats the browser can't decode itself (e.g. HEIC/HEIF) — the client
     calls this only when it already failed to render its own preview."""
-    raw, _fmt, _ct = await _read_upload(request)
-    try:
-        img = Image.open(io.BytesIO(raw))
-        img.load()
-    except (UnidentifiedImageError, OSError, ValueError):
-        raise HTTPException(
-            status_code=400,
-            detail="That doesn't look like a valid image — try a different photo.",
-        )
-
-    img = img.convert("RGB")
-    img.thumbnail((640, 640))
-    buf = io.BytesIO()
-    img.save(buf, format="JPEG", quality=80)
-    return Response(content=buf.getvalue(), media_type="image/jpeg")
+    raw, _fmt, _ct = await images.read_upload(request)
+    return Response(content=images.thumbnail(raw), media_type="image/jpeg")
 
 
 async def _cache_hit(db, input_hash: str) -> dict | None:
@@ -297,8 +196,8 @@ async def _store_scan(
     cursor = await db.execute(
         """INSERT INTO scans
            (image_path, query_text, input_hash, has_food, detected_items, matched_foods,
-            advice, verdict, model_detect, model_identify, model_advice, error)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            advice, verdict, model_detect, model_identify, model_advice, model_classify, error)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             image_path,
             query_text,
@@ -311,11 +210,39 @@ async def _store_scan(
             settings.food_detect_model,
             settings.food_identify_model,
             settings.advice_model,
+            settings.gout_classify_model,
             error,
         ),
     )
     await db.commit()
     return cursor.lastrowid
+
+
+async def _store_error(db, *, image_path=None, query_text="", input_hash: str, message: str) -> int:
+    return await _store_scan(
+        db,
+        image_path=image_path,
+        query_text=query_text,
+        input_hash=input_hash,
+        has_food=None,
+        detected=[],
+        matched=[],
+        verdict="error",
+        error=message,
+    )
+
+
+async def _store_no_food(db, *, image_path=None, query_text="", input_hash: str) -> int:
+    return await _store_scan(
+        db,
+        image_path=image_path,
+        query_text=query_text,
+        input_hash=input_hash,
+        has_food=False,
+        detected=[],
+        matched=[],
+        verdict="no_food",
+    )
 
 
 @router.post("/scan/text", dependencies=[Depends(rate_limit_scan)])
@@ -337,29 +264,15 @@ async def create_text_scan(request: Request, db=Depends(get_db)):
 
     items = await llm.identify_foods_from_text(text)
     if items is None:
-        scan_id = await _store_scan(
+        scan_id = await _store_error(
             db,
-            image_path=None,
             query_text=text,
             input_hash=input_hash,
-            has_food=None,
-            detected=[],
-            matched=[],
-            verdict="error",
-            error="Could not analyze that (LLM not reachable or not configured).",
+            message="Could not analyze that (LLM not reachable or not configured).",
         )
         return _redirect(f"/scan/{scan_id}")
     if not items:
-        scan_id = await _store_scan(
-            db,
-            image_path=None,
-            query_text=text,
-            input_hash=input_hash,
-            has_food=False,
-            detected=[],
-            matched=[],
-            verdict="no_food",
-        )
+        scan_id = await _store_no_food(db, query_text=text, input_hash=input_hash)
         return _redirect(f"/scan/{scan_id}")
 
     scan_id = await _run_pipeline(

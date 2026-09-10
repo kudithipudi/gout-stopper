@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS scans (
     model_detect TEXT,
     model_identify TEXT,
     model_advice TEXT,
+    model_classify TEXT,
     error TEXT,
     -- 'good' | 'bad' | NULL (user rating)
     rating TEXT,

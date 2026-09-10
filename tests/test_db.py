@@ -29,6 +29,7 @@ async def test_migrate_adds_input_hash_to_old_db(tmp_path):
     conn = await connect(str(db_path))
     cols = {r["name"] for r in await conn.execute_fetchall("PRAGMA table_info(scans)")}
     assert "input_hash" in cols
+    assert "model_classify" in cols
     idx = {
         r["name"]
         for r in await conn.execute_fetchall(
