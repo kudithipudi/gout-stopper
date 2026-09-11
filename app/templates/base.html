@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <meta name="color-scheme" content="light" />
 <meta name="theme-color" content="#4f46e5" />
-<title>{% block title %}GoutStopper — check what's on your plate{% endblock %}</title>
+<title>{% block title %}Gout Stopper — check what's on your plate{% endblock %}</title>
 <link rel="manifest" href="{{ prefix }}/manifest.webmanifest" />
 <link rel="icon" href="/favicon.ico" />
 <link rel="apple-touch-icon" href="{{ prefix }}/static/icons/apple-touch-icon.png" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-<meta name="apple-mobile-web-app-title" content="GoutStopper" />
+<meta name="apple-mobile-web-app-title" content="Gout Stopper" />
 <link rel="stylesheet" href="{{ prefix }}/static/css/app.css" />
 <script defer src="{{ prefix }}/static/js/history.js"></script>
 <script defer src="{{ prefix }}/static/js/alpine.min.js"></script>
@@ -30,9 +30,9 @@
   <header class="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200">
     <div class="max-w-[1100px] mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
       <a href="{{ prefix }}/" class="flex items-center gap-2.5 min-w-0">
-        <span class="inline-flex items-center justify-center h-9 w-9 rounded-lg bg-indigo-600 text-white text-sm font-bold flex-shrink-0">G</span>
+        <img src="{{ prefix }}/static/icons/icon-192.png" alt="" class="h-9 w-9 rounded-lg flex-shrink-0" width="36" height="36" />
         <span class="flex flex-col leading-tight min-w-0">
-          <span class="text-[15px] font-semibold tracking-tight">GoutStopper</span>
+          <span class="text-[15px] font-semibold tracking-tight">Gout Stopper</span>
           <span class="hidden sm:block text-xs text-slate-500">Check what's on your plate</span>
         </span>
       </a>
@@ -54,7 +54,7 @@
 
   <footer class="border-t border-slate-200 py-6 mt-10">
     <div class="max-w-[1100px] mx-auto px-4 text-xs text-slate-500 space-y-1">
-      <p>GoutStopper is an educational tool, not a medical device. It does not provide medical advice, diagnosis, or treatment. Always consult a doctor or dietitian before changing your diet.</p>
+      <p>Gout Stopper is an educational tool, not a medical device. It does not provide medical advice, diagnosis, or treatment. Always consult a doctor or dietitian before changing your diet.</p>
       <p>Part of the <a href="https://lab.kudithipudi.org/" class="inline-block py-1 underline decoration-slate-300 underline-offset-2 hover:text-slate-700 transition">Kudithipudi AI Lab</a>.</p>
     </div>
   </footer>
@@ -62,11 +62,11 @@
 
 <div x-data="installBanner()" x-show="visible" x-cloak x-transition
      x-effect="document.body.style.paddingBottom = visible ? '68px' : ''"
-     class="fixed inset-x-0 bottom-0 z-40 sm:hidden" role="region" aria-label="Install GoutStopper">
+     class="fixed inset-x-0 bottom-0 z-40 sm:hidden" role="region" aria-label="Install Gout Stopper">
   <div class="flex items-center gap-3 border-t border-slate-200 bg-white px-4 py-2.5 shadow-[0_-4px_20px_rgba(15,23,42,0.08)]">
     <img src="{{ prefix }}/static/icons/icon-192.png" alt="" class="h-8 w-8 rounded-lg flex-shrink-0" />
     <p class="flex-1 min-w-0 text-xs leading-snug text-slate-500">
-      <span class="font-semibold text-slate-900">Install GoutStopper</span>
+      <span class="font-semibold text-slate-900">Install Gout Stopper</span>
       <span x-show="isIos" x-cloak> — tap <span aria-hidden="true">&#x2191;</span> Share, then “Add to Home Screen”.</span>
       <span x-show="!isIos"> for quick, full-screen access.</span>
     </p>

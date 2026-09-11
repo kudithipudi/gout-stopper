@@ -1,6 +1,6 @@
 {
-  "name": "GoutStopper",
-  "short_name": "GoutStopper",
+  "name": "Gout Stopper",
+  "short_name": "Gout Stopper",
   "description": "Check what's on your plate for gout triggers.",
   "start_url": "{{ prefix }}/",
   "scope": "{{ prefix }}/",

@@ -52,7 +52,7 @@ async def test_health_ok(anon_client):
 async def test_index_ok(anon_client):
     resp = await anon_client.get("/")
     assert resp.status_code == 200
-    assert "GoutStopper" in resp.text
+    assert "Gout Stopper" in resp.text
     assert "capture" in resp.text
 
 
@@ -98,7 +98,7 @@ async def test_manifest(anon_client):
     assert resp.status_code == 200
     assert resp.headers["content-type"].startswith("application/manifest+json")
     body = resp.json()
-    assert body["name"] == "GoutStopper"
+    assert body["name"] == "Gout Stopper"
     assert body["display"] == "standalone"
     assert len(body["icons"]) >= 2
 

@@ -5,6 +5,13 @@ workers = 1
 worker_class = "uvicorn.workers.UvicornWorker"
 chdir = "/var/www/gout-stopper"
 
+# Must exceed LLM_TIMEOUT (120s, see app/config.py) — the vision LLM scan can
+# legitimately run that long. Without this, gunicorn's default 30s worker
+# timeout kills the (single) worker mid-request, taking the whole app down
+# for every user until it reboots.
+timeout = 150
+graceful_timeout = 30
+
 # Local files under app/logs/ rather than journald (see standards §7). Paths
 # resolve relative to chdir above.
 accesslog = "app/logs/access.log"
