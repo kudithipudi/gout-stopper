@@ -2,6 +2,11 @@ import os
 
 bind = "unix:/var/www/gout-stopper/gout-stopper.sock"
 workers = 1
+
+# gunicorn 26 enables a control socket by default; under this unit's
+# ProtectSystem=strict sandboxing that throws "Read-only file system" on
+# restart, so disable it explicitly.
+control_socket_disable = True
 worker_class = "uvicorn.workers.UvicornWorker"
 chdir = "/var/www/gout-stopper"
 
