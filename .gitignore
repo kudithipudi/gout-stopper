@@ -57,3 +57,4 @@ GEMINI.md
 
 # uxcheck output (screenshots + report), regenerable.
 uxcheck-report/
+.coverage
