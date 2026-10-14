@@ -12,9 +12,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="default" />
 <meta name="apple-mobile-web-app-title" content="Gout Stopper" />
-<link rel="stylesheet" href="{{ prefix }}/static/css/app.css" />
-<script defer src="{{ prefix }}/static/js/history.js"></script>
-<script defer src="{{ prefix }}/static/js/alpine.min.js"></script>
+<link rel="stylesheet" href="{{ asset('css/app.css') }}" />
+<script defer src="{{ asset('js/history.js') }}"></script>
+<script defer src="{{ asset('js/alpine.min.js') }}"></script>
 <script>
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {

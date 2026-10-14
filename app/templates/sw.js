@@ -2,13 +2,15 @@ const CACHE_VERSION = "goutstopper-v2";
 const PREFIX = "{{ prefix }}";
 const OFFLINE_URL = PREFIX + "/offline";
 
+// CSS/JS URLs carry a content hash (app/static_assets.py), the same URLs
+// the pages request, so the cache-first lookup below matches them exactly.
 const PRECACHE_URLS = [
   PREFIX + "/",
   PREFIX + "/about",
   OFFLINE_URL,
-  PREFIX + "/static/css/app.css",
-  PREFIX + "/static/js/alpine.min.js",
-  PREFIX + "/static/js/history.js",
+  "{{ asset('css/app.css') }}",
+  "{{ asset('js/alpine.min.js') }}",
+  "{{ asset('js/history.js') }}",
   PREFIX + "/static/icons/icon-192.png",
   PREFIX + "/static/icons/icon-512.png",
 ];

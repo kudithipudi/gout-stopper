@@ -13,6 +13,7 @@ from app.config import get_settings
 from app.db import init_db
 from app.routers import admin, pages, scan
 from app.services import llm
+from app.static_assets import install_asset_global
 
 settings = get_settings()
 # App logs inherit gunicorn's errorlog stream (app/logs/app.log) — see §7.
@@ -70,6 +71,7 @@ app.add_middleware(
 )
 templates = Jinja2Templates(directory="app/templates")
 templates.env.globals["prefix"] = settings.root_path
+install_asset_global(templates, f"{settings.root_path}/static", "app/static")
 
 
 @app.middleware("http")

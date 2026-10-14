@@ -7,10 +7,12 @@ from fastapi.templating import Jinja2Templates
 from app.config import get_settings
 from app.db import check_and_record_rate_limit, get_db
 from app.services import csrf, ratelimit
+from app.static_assets import install_asset_global
 
 router = APIRouter(prefix="/admin")
 templates = Jinja2Templates(directory="app/templates")
 templates.env.globals["prefix"] = get_settings().root_path
+install_asset_global(templates, f"{get_settings().root_path}/static", "app/static")
 
 _CATEGORIES = {"avoid", "limit", "ok"}
 

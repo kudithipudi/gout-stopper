@@ -18,10 +18,12 @@ from app.db import (
 )
 from app.services import images, llm, matcher
 from app.services import ratelimit
+from app.static_assets import install_asset_global
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 templates.env.globals["prefix"] = get_settings().root_path
+install_asset_global(templates, f"{get_settings().root_path}/static", "app/static")
 
 
 def _redirect(path: str) -> RedirectResponse:
