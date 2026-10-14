@@ -7,7 +7,7 @@ workers = 1
 # ProtectSystem=strict sandboxing that throws "Read-only file system" on
 # restart, so disable it explicitly.
 control_socket_disable = True
-worker_class = "uvicorn.workers.UvicornWorker"
+worker_class = "app.access_log.AccessLogUvicornWorker"
 chdir = "/var/www/gout-stopper"
 
 # Must exceed LLM_TIMEOUT (120s, see app/config.py) — the vision LLM scan can
