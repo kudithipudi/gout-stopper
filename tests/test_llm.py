@@ -35,6 +35,7 @@ def _settings(**overrides):
     base = dict(
         openrouter_api_key="test-key",
         llm_temperature=0.0,
+        llm_max_tokens=2048,
         llm_timeout=5,
         food_detect_model="detect-model",
         food_identify_model="identify-model",

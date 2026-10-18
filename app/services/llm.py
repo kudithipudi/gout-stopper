@@ -124,6 +124,7 @@ async def _chat_json(system: str, user_parts: list[dict], model: str, *, purpose
     payload = {
         "model": model,
         "temperature": settings.llm_temperature,
+        "max_tokens": settings.llm_max_tokens,
         "messages": [
             {"role": "system", "content": system},
             {"role": "user", "content": user_parts},

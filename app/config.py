@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     gout_classify_model: str = "google/gemini-3.1-flash-lite"
     gout_classify_enabled: bool = True
     llm_temperature: float = 0.0
+    # Cap output so OpenRouter doesn't reserve the model's full max (e.g. 65k
+    # tokens) against the credit balance; real responses are a few hundred tokens.
+    llm_max_tokens: int = 2048
     llm_timeout: int = 120
     max_upload_bytes: int = 20 * 1024 * 1024
     scan_rate_limit_per_minute: int = 6
