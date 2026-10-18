@@ -71,6 +71,7 @@ app.add_middleware(
 )
 templates = Jinja2Templates(directory="app/templates")
 templates.env.globals["prefix"] = settings.root_path
+templates.env.globals["og_base"] = "https://lab.kudithipudi.org" + settings.root_path
 install_asset_global(templates, f"{settings.root_path}/static", "app/static")
 
 
