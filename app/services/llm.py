@@ -20,10 +20,10 @@ from typing import Any
 import httpx
 
 from app.config import get_settings
+from app.services.llm_route import chat_routes
 
 logger = logging.getLogger(__name__)
 
-_OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 # One pooled client for the worker's lifetime: a scan is up to three
 # back-to-back calls, and a fresh client per call paid a TLS handshake each time.
@@ -118,11 +118,16 @@ def _parse_json(content: str) -> Any:
 
 async def _chat_json(system: str, user_parts: list[dict], model: str, *, purpose: str = "chat") -> Any:
     settings = get_settings()
-    if not settings.openrouter_api_key:
+    routes = chat_routes(
+        model,
+        openrouter_key=settings.openrouter_api_key,
+        provider=settings.llm_provider,
+        straitly_key=settings.straitly_api_key,
+    )
+    if not routes:
         logger.warning("No OPENROUTER_API_KEY set; skipping LLM call")
         return None
     payload = {
-        "model": model,
         "temperature": settings.llm_temperature,
         "max_tokens": settings.llm_max_tokens,
         "messages": [
@@ -132,28 +137,32 @@ async def _chat_json(system: str, user_parts: list[dict], model: str, *, purpose
         "response_format": {"type": "json_object"},
     }
     started = time.perf_counter()
-    try:
-        resp = await _get_client().post(
-            _OPENROUTER_URL,
-            headers={
-                "Authorization": f"Bearer {settings.openrouter_api_key}",
-                "Content-Type": "application/json",
-            },
-            json=payload,
-        )
-        resp.raise_for_status()
-    except (httpx.HTTPStatusError, httpx.TransportError, httpx.TimeoutException) as exc:
-        logger.error(
-            "OpenRouter request failed (%s %s, %.1fs): %s",
-            purpose, model, time.perf_counter() - started, exc,
-        )
+    for i, route in enumerate(routes):
+        try:
+            resp = await _get_client().post(
+                route.url,
+                headers={
+                    "Authorization": f"Bearer {route.api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={**payload, "model": route.model},
+            )
+            resp.raise_for_status()
+            break
+        except (httpx.HTTPStatusError, httpx.TransportError, httpx.TimeoutException) as exc:
+            logger.log(
+                logging.WARNING if i + 1 < len(routes) else logging.ERROR,
+                "%s request failed (%s %s, %.1fs): %s",
+                route.name, purpose, model, time.perf_counter() - started, exc,
+            )
+    else:
         return None
     data = resp.json()
     usage = data.get("usage") or {}
     reasoning = (usage.get("completion_tokens_details") or {}).get("reasoning_tokens")
     logger.info(
-        "LLM %s %s %.1fs in=%s out=%s%s",
-        purpose, model, time.perf_counter() - started,
+        "LLM %s %s via %s %.1fs in=%s out=%s%s",
+        purpose, model, route.name, time.perf_counter() - started,
         usage.get("prompt_tokens", "?"), usage.get("completion_tokens", "?"),
         f" reasoning={reasoning}" if reasoning else "",
     )

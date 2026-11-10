@@ -8,6 +8,10 @@ class Settings(BaseSettings):
     db_path: str = "data/gout-stopper.db"
     uploads_dir: str = "data/uploads"
     openrouter_api_key: str = ""
+    # "straitly" sends models Straitly carries there first, falling back to
+    # OpenRouter (see app/services/llm_route.py). Anything else: OpenRouter only.
+    llm_provider: str = "openrouter"
+    straitly_api_key: str = ""
     admin_password: str = ""
     session_secret: str = ""
 

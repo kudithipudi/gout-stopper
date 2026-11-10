@@ -27,6 +27,7 @@ import httpx
 import pytest
 
 from app.services import llm
+from app.services.llm_route import OPENROUTER_CHAT_URL, STRAITLY_CHAT_URL
 
 _REAL_CHAT_JSON = llm._chat_json
 
@@ -34,6 +35,8 @@ _REAL_CHAT_JSON = llm._chat_json
 def _settings(**overrides):
     base = dict(
         openrouter_api_key="test-key",
+        llm_provider="openrouter",
+        straitly_api_key="",
         llm_temperature=0.0,
         llm_max_tokens=2048,
         llm_timeout=5,
@@ -200,7 +203,7 @@ class TestChatJsonInternals:
 
     async def test_http_status_error_returns_none(self, monkeypatch):
         monkeypatch.setattr(llm, "get_settings", lambda: _settings())
-        request = httpx.Request("POST", llm._OPENROUTER_URL)
+        request = httpx.Request("POST", OPENROUTER_CHAT_URL)
         response = httpx.Response(500, request=request)
         resp = _FakeResponse(status_error=httpx.HTTPStatusError("boom", request=request, response=response))
         fake = _FakeClient(response=resp)
@@ -397,3 +400,27 @@ class TestGenerateAdvice:
         monkeypatch.setattr(llm, "_chat_json", fake)
         await llm.generate_advice([], [])
         assert "(none identified)" in captured["text"]
+
+    async def test_straitly_failure_falls_back_to_openrouter(self, monkeypatch):
+        monkeypatch.setattr(
+            llm, "get_settings",
+            lambda: _settings(llm_provider="straitly", straitly_api_key="st-key"),
+        )
+        request = httpx.Request("POST", STRAITLY_CHAT_URL)
+        failed = _FakeResponse(status_error=httpx.HTTPStatusError(
+            "boom", request=request, response=httpx.Response(502, request=request)))
+        responses = [failed, _ok_response('{"a": 1}')]
+        fake = _FakeClient()
+
+        async def post(url, headers=None, json=None):
+            fake.calls.append({"url": url, "headers": headers, "json": json})
+            return responses.pop(0)
+
+        fake.post = post
+        monkeypatch.setattr(llm, "_get_client", lambda: fake)
+        assert await _REAL_CHAT_JSON("sys", [], "anthropic/claude-haiku-5.5") == {"a": 1}
+        assert [(c["url"], c["json"]["model"]) for c in fake.calls] == [
+            (STRAITLY_CHAT_URL, "claude-haiku-5-5"),
+            (OPENROUTER_CHAT_URL, "anthropic/claude-haiku-5.5"),
+        ]
+        assert fake.calls[0]["headers"]["Authorization"] == "Bearer st-key"
